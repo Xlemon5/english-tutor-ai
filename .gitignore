@@ -1,0 +1,23 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local IDE/OS files
+.idea/
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local indexes, user records, and generated verification logs
+chroma_db/
+*.db
+data/verification_failures.jsonl
+
+# Learning materials are supplied by the user and may have redistribution limits
+data/documents/**/*.pdf
