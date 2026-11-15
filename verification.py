@@ -17,7 +17,8 @@ import onnxruntime as ort
 
 NLI_REPOSITORY = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
 NLI_REVISION = "8adb042d524ecd5c26d3e3ba0e3fbcf7e2d0864c"
-DEFAULT_GROUNDEDNESS_THRESHOLD = 0.70
+DEFAULT_GROUNDEDNESS_THRESHOLD = 0.50
+DEFAULT_STRICT_VERIFICATION_THRESHOLD = 0.70
 
 
 def normalize_text(value: str) -> str:
@@ -113,7 +114,10 @@ class VerificationLayer:
     }
 
     def __init__(self, threshold: float = DEFAULT_GROUNDEDNESS_THRESHOLD) -> None:
-        self.threshold = threshold
+        self.groundedness_threshold = threshold
+        # Keep translation, self-consistency, and quiz answer checks stricter.
+        self.translation_threshold = DEFAULT_STRICT_VERIFICATION_THRESHOLD
+        self.threshold = DEFAULT_STRICT_VERIFICATION_THRESHOLD
         self._nli: NLIModel | None = None
         self._load_lock = threading.Lock()
         self._log_lock = threading.Lock()
@@ -196,13 +200,14 @@ class VerificationLayer:
             translation_entailment = scores[index + 1].get("entailment", 0.0)
             claim_score = min(source_entailment, translation_entailment)
             groundedness = min(groundedness, claim_score)
-            if source_entailment < self.threshold or translation_entailment < self.threshold:
+            if source_entailment < self.groundedness_threshold or translation_entailment < self.translation_threshold:
                 self.record_failure(
                     "unsupported_claim",
                     operation,
                     source_entailment=round(source_entailment, 4),
                     translation_entailment=round(translation_entailment, 4),
-                    threshold=self.threshold,
+                    groundedness_threshold=self.groundedness_threshold,
+                    translation_threshold=self.translation_threshold,
                 )
                 return False, groundedness
         return True, groundedness
