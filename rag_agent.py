@@ -234,6 +234,7 @@ class RAGAgent:
 Каждое утверждение должно быть коротким и атомарным. Верни text как точный краткий перевод claim_source на русский, без новых деталей;
 claim_source — полный проверяемый факт на языке цитаты, сохрани ключевые термины и смысл источника; claim_english — тот же смысл простым английским.
 Также укажи source_id и дословную quote, содержащую достаточно контекста для подтверждения.
+Сначала выбери полный span и дословно процитируй его, затем формулируй claim. Дай соседний контекст, если он нужен для понимания отсылок. Перед claim разреши местоимения: вместо неясного «он/она/это/they/it» явно назови antecedent (слово или объект, к которому отсылает местоимение). Если antecedent нельзя однозначно определить, воздержись от этого claim.
 Не объединяй несколько правил в один тезис и не добавляй детали, которых нет в цитате. Для каждого отдельного правила используй собственный claim и подтверждающую цитату.
 Если фрагменты не отвечают на вопрос, верни abstain=true и пустой claims. Иначе abstain=false.
 Не добавляй фразу об отсутствии информации к содержательному ответу. Не добавляй источники от себя.
@@ -252,7 +253,10 @@ claim_source — полный проверяемый факт на языке ц
 СТРОГАЯ ПРОВЕРЯЕМАЯ ПОВТОРНАЯ ПОПЫТКА:
 - В каждом claim ровно один факт.
 - claim_source и text должны сообщать один и тот же факт без дополнительных деталей.
-- quote должен целиком подтверждать этот факт; если цитата не подтверждает деталь, не включай ее.
+- СНАЧАЛА выбери и верни дословную quote для каждого claim; только после этого перефразируй цитату.
+- quote должна включать соседнее предложение, если оно нужно для разрешения местоимения или отсылки.
+- Замени местоимения явным antecedent из цитируемого контекста; если это невозможно, не включай claim.
+- quote должна целиком подтверждать факт; если цитата не подтверждает деталь, не включай ее.
 - Для русскоязычной цитаты формулируй claim_source по-русски, для англоязычной — по-английски.
 - Если ни одного подтверждаемого факта нет, верни abstain=true и пустой claims.
 """
@@ -283,10 +287,12 @@ claim_source — полный проверяемый факт на языке ц
                     if not claims or any(not isinstance(claim, dict) for claim in claims):
                         self.verifier.record_failure("unsupported_claim", "chat", reason="empty_or_invalid_claims")
                         continue
-                    ok, _score = self.verifier.verify_claims(claims, retrieved)
+                    ok, _score, action = self.verifier.verify_claims(claims, retrieved)
                     if ok:
                         sample = {"abstain": False, "claims": claims}
                         break
+                    if action == "abstain":
+                        return fallback
                 if sample is None:
                     return fallback
                 candidates.append(sample)
@@ -299,12 +305,18 @@ claim_source — полный проверяемый факт на языке ц
             rendered_claims = []
             for claim in agreed_claims:
                 text = claim.get("_verified_text", claim["text"]).strip()
-                if text not in rendered_claims:
-                    rendered_claims.append(text)
                 source = retrieved[claim["source_id"]]
                 citation = f"[Файл: {source['source']}, стр. {source['page']}]"
                 if citation not in citations:
                     citations.append(citation)
+                if claim.get("_low_confidence"):
+                    quote = claim["quote"].strip()
+                    text = (
+                        f"{text} ⚠️ Низкая уверенность (low_confidence). "
+                        f"Цитата: «{quote}» — источник: {citation}"
+                    )
+                if text not in rendered_claims:
+                    rendered_claims.append(text)
             return " ".join(rendered_claims) + "\n\nИсточники: " + ", ".join(citations)
 
         except Exception as e:

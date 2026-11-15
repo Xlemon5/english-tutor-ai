@@ -18,6 +18,7 @@ __pycache__/
 chroma_db/
 *.db
 data/verification_failures.jsonl
+data/verification_scores.jsonl
 
 # Learning materials are supplied by the user and may have redistribution limits
 data/documents/**/*.pdf

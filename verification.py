@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,22 +18,40 @@ import onnxruntime as ort
 
 NLI_REPOSITORY = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
 NLI_REVISION = "8adb042d524ecd5c26d3e3ba0e3fbcf7e2d0864c"
-DEFAULT_GROUNDEDNESS_THRESHOLD = 0.50
-DEFAULT_STRICT_VERIFICATION_THRESHOLD = 0.70
+DEFAULT_GROUNDEDNESS_THRESHOLD = float(os.getenv("RAG_GROUNDEDNESS_THRESHOLD", "0.50"))
+DEFAULT_STRICT_VERIFICATION_THRESHOLD = float(os.getenv("RAG_STRICT_NLI_THRESHOLD", "0.70"))
+LOW_SCORE_RETRY_THRESHOLD = float(os.getenv("RAG_LOW_SCORE_RETRY_THRESHOLD", "0.30"))
 
 
 def normalize_text(value: str) -> str:
     return " ".join(str(value or "").casefold().split())
 
 
-def local_evidence_span(source: str, quote: str, radius: int = 400) -> str:
-    """Return a bounded source window around an exact quote for contextual NLI."""
+def local_evidence_span(source: str, quote: str, neighbors: int = 1) -> str:
+    """Return the exact quote with at most one neighboring sentence on each side."""
     normalized_source = normalize_text(source)
     normalized_quote = normalize_text(quote)
     position = normalized_source.find(normalized_quote)
     if position < 0:
         return normalized_quote
-    return normalized_source[max(0, position - radius):position + len(normalized_quote) + radius]
+    sentences = list(re.finditer(r".+?(?:[.!?。！？]+(?=\s|$)|$)", normalized_source))
+    if not sentences:
+        return normalized_quote
+    quote_end = position + len(normalized_quote)
+    first_sentence = next(
+        (i for i, match in enumerate(sentences) if match.start() <= position < match.end()),
+        None,
+    )
+    last_sentence = next(
+        (i for i, match in enumerate(sentences) if match.start() < quote_end <= match.end()),
+        first_sentence,
+    )
+    if first_sentence is None:
+        return normalized_quote
+    start_index = max(0, first_sentence - neighbors)
+    end_index = min(len(sentences), (last_sentence or first_sentence) + neighbors + 1)
+    span = " ".join(match.group().strip() for match in sentences[start_index:end_index]).strip()
+    return span[:1800]
 
 
 def is_russian_text(value: str) -> bool:
@@ -41,6 +60,34 @@ def is_russian_text(value: str) -> bool:
         return False
     cyrillic = sum("\u0400" <= char <= "\u04FF" for char in letters)
     return cyrillic / len(letters) >= 0.35
+
+
+def has_unresolved_coreference(value: str) -> bool:
+    # Full coreference resolution is not inferred from a bare pronoun detector:
+    # the generator must rewrite anaphors with their explicit antecedent, and
+    # this gate rejects remaining pronouns before they reach NLI.
+    unresolved_patterns = (
+        r"\b(?:it|they|them|their|he|she|his|her)\b",
+        r"\b(?:this|these|those)\s+(?:is|are|was|were|means|refers|shows)\b",
+        r"\b(?:он|она|оно|они|его|ее|её|их)\b",
+        r"\b(?:этот|эта|это|эти|такой|такая|такие)\s+(?:есть|был|была|были|означает|называется)\b",
+    )
+    return any(re.search(pattern, value, flags=re.IGNORECASE) for pattern in unresolved_patterns)
+
+
+def score_zone(
+    score: float,
+    groundedness_threshold: float = DEFAULT_GROUNDEDNESS_THRESHOLD,
+    strict_threshold: float = DEFAULT_STRICT_VERIFICATION_THRESHOLD,
+    low_threshold: float = LOW_SCORE_RETRY_THRESHOLD,
+) -> str:
+    if score < low_threshold:
+        return f"lt_{low_threshold:.2f}"
+    if score < groundedness_threshold:
+        return f"{low_threshold:.2f}_{groundedness_threshold:.2f}"
+    if score < strict_threshold:
+        return f"{groundedness_threshold:.2f}_{strict_threshold:.2f}"
+    return f"gte_{strict_threshold:.2f}"
 
 
 class NLIModel:
@@ -122,14 +169,21 @@ class VerificationLayer:
     }
 
     def __init__(self, threshold: float = DEFAULT_GROUNDEDNESS_THRESHOLD) -> None:
+        if not 0 <= LOW_SCORE_RETRY_THRESHOLD < threshold < DEFAULT_STRICT_VERIFICATION_THRESHOLD <= 1:
+            raise ValueError(
+                "Verification thresholds must satisfy 0 <= retry < groundedness < strict <= 1"
+            )
         self.groundedness_threshold = threshold
         # Keep translation, self-consistency, and quiz answer checks stricter.
         self.translation_threshold = DEFAULT_STRICT_VERIFICATION_THRESHOLD
         self.threshold = DEFAULT_STRICT_VERIFICATION_THRESHOLD
+        self.low_score_retry_threshold = LOW_SCORE_RETRY_THRESHOLD
         self._nli: NLIModel | None = None
         self._load_lock = threading.Lock()
         self._log_lock = threading.Lock()
-        self.log_path = Path(__file__).resolve().parent / "data" / "verification_failures.jsonl"
+        data_dir = Path(__file__).resolve().parent / "data"
+        self.log_path = data_dir / "verification_failures.jsonl"
+        self.score_log_path = data_dir / "verification_scores.jsonl"
 
     def record_failure(self, failure_type: str, operation: str, **details: Any) -> None:
         if failure_type not in self.FAILURE_TYPES:
@@ -142,6 +196,35 @@ class VerificationLayer:
         }
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self._log_lock, self.log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def record_score(
+        self,
+        operation: str,
+        check: str,
+        scores: dict[str, float],
+        threshold: float,
+    ) -> None:
+        label = max(scores, key=scores.get)
+        entailment = float(scores.get("entailment", 0.0))
+        event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "operation": operation,
+            "check": check,
+            "entailment": round(entailment, 4),
+            "neutral": round(float(scores.get("neutral", 0.0)), 4),
+            "contradiction": round(float(scores.get("contradiction", 0.0)), 4),
+            "predicted_label": label,
+            "zone": score_zone(
+                entailment,
+                groundedness_threshold=self.groundedness_threshold,
+                strict_threshold=self.threshold,
+                low_threshold=self.low_score_retry_threshold,
+            ),
+            "threshold": threshold,
+        }
+        self.score_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._log_lock, self.score_log_path.open("a", encoding="utf-8") as log_file:
             log_file.write(json.dumps(event, ensure_ascii=False) + "\n")
 
     def _model(self) -> NLIModel:
@@ -168,10 +251,10 @@ class VerificationLayer:
         claims: list[dict[str, Any]],
         retrieved: dict[str, dict[str, Any]],
         operation: str = "chat",
-    ) -> tuple[bool, float]:
+    ) -> tuple[bool, float, str]:
         if not claims:
             self.record_failure("unsupported_claim", operation, reason="no_atomic_claims")
-            return False, 0.0
+            return False, 0.0, "retry"
 
         pairs: list[tuple[str, str]] = []
         russian_sources: list[bool] = []
@@ -183,21 +266,31 @@ class VerificationLayer:
             claim_source = claim.get("claim_source")
             if not isinstance(source_id, str) or source_id not in retrieved:
                 self.record_failure("bad_citation", operation, reason="source_id_not_retrieved")
-                return False, 0.0
+                return False, 0.0, "retry"
             if not all(isinstance(value, str) and value.strip() for value in (quote, text, claim_english, claim_source)):
                 self.record_failure("unsupported_claim", operation, reason="claim_missing_text_or_evidence")
-                return False, 0.0
+                return False, 0.0, "retry"
 
             source = retrieved[source_id].get("content", "")
             normalized_quote = normalize_text(quote)
             if len(normalized_quote) < 30 or normalized_quote not in normalize_text(source):
                 self.record_failure("citation_drift", operation, reason="quote_not_in_cited_source")
-                return False, 0.0
+                return False, 0.0, "retry"
 
-            # Ground against the exact cited span. For Russian sources, render
-            # the verified Russian claim itself; only English/other sources
-            # need a separate Russian translation check.
-            pairs.append((quote, claim_source))
+            evidence_span = local_evidence_span(source, quote, neighbors=1)
+            if has_unresolved_coreference(claim_source):
+                self.record_failure(
+                    "unsupported_claim",
+                    operation,
+                    reason="unresolved_coreference",
+                    quote_preview=quote[:240],
+                    source_claim_preview=claim_source[:240],
+                )
+                return False, 0.0, "retry"
+
+            # Keep the citation exact-check separate from the short sentence
+            # window used by NLI for nearby context and anaphora.
+            pairs.append((evidence_span, claim_source))
             russian_source = is_russian_text(quote)
             russian_sources.append(russian_source)
             if not russian_source:
@@ -205,21 +298,62 @@ class VerificationLayer:
 
         scores = self._scores(pairs, operation)
         if scores is None:
-            return False, 0.0
+            return False, 0.0, "abstain"
         groundedness = 1.0
         cursor = 0
         for claim_index, claim in enumerate(claims):
-            source_entailment = scores[cursor].get("entailment", 0.0)
+            source_scores = scores[cursor]
             cursor += 1
+            source_entailment = source_scores.get("entailment", 0.0)
+            source_label = max(source_scores, key=source_scores.get)
+            self.record_score(operation, "groundedness", source_scores, self.groundedness_threshold)
             if russian_sources[claim_index]:
                 translation_entailment = 1.0
                 claim["_verified_text"] = claim["claim_source"].strip()
+                translation_scores = None
             else:
-                translation_entailment = scores[cursor].get("entailment", 0.0)
+                translation_scores = scores[cursor]
                 cursor += 1
+                translation_entailment = translation_scores.get("entailment", 0.0)
                 claim["_verified_text"] = claim["text"].strip()
+                self.record_score(
+                    operation,
+                    "translation",
+                    translation_scores,
+                    self.translation_threshold,
+                )
+
             claim_score = min(source_entailment, translation_entailment)
             groundedness = min(groundedness, claim_score)
+            if source_entailment < self.low_score_retry_threshold and source_label == "contradiction":
+                self.record_failure(
+                    "unsupported_claim",
+                    operation,
+                    reason="source_contradiction",
+                    source_entailment=round(source_entailment, 4),
+                    contradiction=round(source_scores.get("contradiction", 0.0), 4),
+                    threshold=self.low_score_retry_threshold,
+                    quote_preview=claim.get("quote", "")[:240],
+                    source_claim_preview=claim.get("claim_source", "")[:240],
+                )
+                return False, groundedness, "abstain"
+
+            translation_label = max(translation_scores, key=translation_scores.get) if translation_scores else None
+            if (
+                translation_scores
+                and translation_entailment < self.low_score_retry_threshold
+                and translation_label == "contradiction"
+            ):
+                self.record_failure(
+                    "unsupported_claim",
+                    operation,
+                    reason="answer_contradicts_verified_claim",
+                    translation_entailment=round(translation_entailment, 4),
+                    contradiction=round(translation_scores.get("contradiction", 0.0), 4),
+                    threshold=self.low_score_retry_threshold,
+                )
+                return False, groundedness, "abstain"
+
             if source_entailment < self.groundedness_threshold or translation_entailment < self.translation_threshold:
                 self.record_failure(
                     "unsupported_claim",
@@ -228,12 +362,17 @@ class VerificationLayer:
                     translation_entailment=round(translation_entailment, 4),
                     groundedness_threshold=self.groundedness_threshold,
                     translation_threshold=self.translation_threshold,
+                    predicted_label=source_label,
                     quote_preview=claim.get("quote", "")[:240],
                     source_claim_preview=claim.get("claim_source", "")[:240],
                     answer_claim_preview=claim.get("text", "")[:240],
                 )
-                return False, groundedness
-        return True, groundedness
+                return False, groundedness, "retry"
+
+            claim["_low_confidence"] = source_entailment < self.threshold
+            claim["_confidence_flag"] = "low_confidence" if claim["_low_confidence"] else "high_confidence"
+            claim["_groundedness_score"] = round(source_entailment, 4)
+        return True, groundedness, "accept"
 
     def verify_consistency(
         self,
@@ -268,6 +407,18 @@ class VerificationLayer:
                         left_to_right = scores[cursor]
                         right_to_left = scores[cursor + 1]
                         cursor += 2
+                        self.record_score(
+                            operation,
+                            "self_consistency",
+                            left_to_right,
+                            self.threshold,
+                        )
+                        self.record_score(
+                            operation,
+                            "self_consistency",
+                            right_to_left,
+                            self.threshold,
+                        )
                         if left_to_right.get("contradiction", 0.0) >= self.threshold or right_to_left.get("contradiction", 0.0) >= self.threshold:
                             self.record_failure("internal_contradiction", operation, reason="nli_contradiction")
                             return False, []
@@ -340,6 +491,7 @@ class VerificationLayer:
             return False
         score_by_question: dict[int, dict[str, float]] = {}
         for (question_index, option), score in zip(question_positions, scores):
+            self.record_score("quiz", "citation_alignment", score, self.threshold)
             score_by_question.setdefault(question_index, {})[option] = score.get("entailment", 0.0)
 
         for index, question in enumerate(questions):
