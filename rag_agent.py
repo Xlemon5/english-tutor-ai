@@ -246,35 +246,49 @@ claim_source — полный проверяемый факт на языке ц
 
             candidates = []
             temperatures = (0.0, 0.35, 0.7)
+            strict_prompt = prompt + """
+
+СТРОГАЯ ПРОВЕРЯЕМАЯ ПОВТОРНАЯ ПОПЫТКА:
+- В каждом claim ровно один факт.
+- claim_source и text должны сообщать один и тот же факт без дополнительных деталей.
+- quote должен целиком подтверждать этот факт; если цитата не подтверждает деталь, не включай ее.
+- Для русскоязычной цитаты формулируй claim_source по-русски, для англоязычной — по-английски.
+- Если ни одного подтверждаемого факта нет, верни abstain=true и пустой claims.
+"""
             for temperature in temperatures:
-                try:
-                    response = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json={
-                        "model": LLM_MODEL,
-                        "prompt": prompt,
-                        "format": "json",
-                        "stream": False,
-                        "options": {"temperature": temperature, "top_p": 0.9},
-                    }, timeout=300)
-                    response.raise_for_status()
+                sample = None
+                for attempt in range(2):
+                    try:
+                        response = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json={
+                            "model": LLM_MODEL,
+                            "prompt": prompt if attempt == 0 else strict_prompt,
+                            "format": "json",
+                            "stream": False,
+                            "options": {"temperature": temperature if attempt == 0 else 0.0, "top_p": 0.9},
+                        }, timeout=300)
+                        response.raise_for_status()
+                    except requests.RequestException as error:
+                        print(f"Ошибка генерации ответа: {error}")
+                        return fallback
+
                     payload = self._json_payload(response.json().get("response", ""))
                     if not isinstance(payload, dict) or not isinstance(payload.get("claims"), list):
                         self.verifier.record_failure("unsupported_claim", "chat", reason="invalid_claim_schema")
-                        return fallback
-                    abstain = payload.get("abstain") is True
-                    if abstain:
-                        candidates.append({"abstain": True, "claims": []})
                         continue
+                    if payload.get("abstain") is True:
+                        sample = {"abstain": True, "claims": []}
+                        break
                     claims = payload["claims"]
                     if not claims or any(not isinstance(claim, dict) for claim in claims):
                         self.verifier.record_failure("unsupported_claim", "chat", reason="empty_or_invalid_claims")
-                        return fallback
+                        continue
                     ok, _score = self.verifier.verify_claims(claims, retrieved)
-                    if not ok:
-                        return fallback
-                    candidates.append({"abstain": False, "claims": claims})
-                except requests.RequestException as error:
-                    print(f"Ошибка генерации ответа: {error}")
+                    if ok:
+                        sample = {"abstain": False, "claims": claims}
+                        break
+                if sample is None:
                     return fallback
+                candidates.append(sample)
 
             consistent, agreed_claims = self.verifier.verify_consistency(candidates)
             if not consistent or not agreed_claims:
@@ -283,7 +297,7 @@ claim_source — полный проверяемый факт на языке ц
             citations = []
             rendered_claims = []
             for claim in agreed_claims:
-                text = claim["text"].strip()
+                text = claim.get("_verified_text", claim["text"]).strip()
                 if text not in rendered_claims:
                     rendered_claims.append(text)
                 source = retrieved[claim["source_id"]]

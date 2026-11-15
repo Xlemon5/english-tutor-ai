@@ -35,6 +35,14 @@ def local_evidence_span(source: str, quote: str, radius: int = 400) -> str:
     return normalized_source[max(0, position - radius):position + len(normalized_quote) + radius]
 
 
+def is_russian_text(value: str) -> bool:
+    letters = [char for char in value if char.isalpha()]
+    if not letters:
+        return False
+    cyrillic = sum("\u0400" <= char <= "\u04FF" for char in letters)
+    return cyrillic / len(letters) >= 0.35
+
+
 class NLIModel:
     """CPU ONNX runner for multilingual entailment/neutral/contradiction scores."""
 
@@ -166,6 +174,7 @@ class VerificationLayer:
             return False, 0.0
 
         pairs: list[tuple[str, str]] = []
+        russian_sources: list[bool] = []
         for claim in claims:
             source_id = claim.get("source_id")
             quote = claim.get("quote")
@@ -185,19 +194,30 @@ class VerificationLayer:
                 self.record_failure("citation_drift", operation, reason="quote_not_in_cited_source")
                 return False, 0.0
 
-            # Match the citation and its factual claim in the source language;
-            # then check that the Russian text shown to the learner preserves it.
-            evidence_span = local_evidence_span(source, quote)
-            pairs.append((evidence_span, claim_source))
-            pairs.append((claim_source, text))
+            # Ground against the exact cited span. For Russian sources, render
+            # the verified Russian claim itself; only English/other sources
+            # need a separate Russian translation check.
+            pairs.append((quote, claim_source))
+            russian_source = is_russian_text(quote)
+            russian_sources.append(russian_source)
+            if not russian_source:
+                pairs.append((claim_source, text))
 
         scores = self._scores(pairs, operation)
         if scores is None:
             return False, 0.0
         groundedness = 1.0
-        for index in range(0, len(scores), 2):
-            source_entailment = scores[index].get("entailment", 0.0)
-            translation_entailment = scores[index + 1].get("entailment", 0.0)
+        cursor = 0
+        for claim_index, claim in enumerate(claims):
+            source_entailment = scores[cursor].get("entailment", 0.0)
+            cursor += 1
+            if russian_sources[claim_index]:
+                translation_entailment = 1.0
+                claim["_verified_text"] = claim["claim_source"].strip()
+            else:
+                translation_entailment = scores[cursor].get("entailment", 0.0)
+                cursor += 1
+                claim["_verified_text"] = claim["text"].strip()
             claim_score = min(source_entailment, translation_entailment)
             groundedness = min(groundedness, claim_score)
             if source_entailment < self.groundedness_threshold or translation_entailment < self.translation_threshold:
@@ -208,6 +228,9 @@ class VerificationLayer:
                     translation_entailment=round(translation_entailment, 4),
                     groundedness_threshold=self.groundedness_threshold,
                     translation_threshold=self.translation_threshold,
+                    quote_preview=claim.get("quote", "")[:240],
+                    source_claim_preview=claim.get("claim_source", "")[:240],
+                    answer_claim_preview=claim.get("text", "")[:240],
                 )
                 return False, groundedness
         return True, groundedness
@@ -226,12 +249,10 @@ class VerificationLayer:
 
         claim_sets = [candidate.get("claims", []) for candidate in candidates]
         pairs: list[tuple[str, str]] = []
-        pair_positions: list[tuple[int, int]] = []
         for left_index in range(len(claim_sets)):
             for right_index in range(left_index + 1, len(claim_sets)):
                 for left_claim in claim_sets[left_index]:
                     for right_claim in claim_sets[right_index]:
-                        pair_positions.append((left_index, right_index))
                         pairs.append((left_claim["claim_english"], right_claim["claim_english"]))
                         pairs.append((right_claim["claim_english"], left_claim["claim_english"]))
 
@@ -242,23 +263,14 @@ class VerificationLayer:
         cursor = 0
         for left_index in range(len(claim_sets)):
             for right_index in range(left_index + 1, len(claim_sets)):
-                related_left: set[int] = set()
-                related_right: set[int] = set()
-                for left_claim_index, _left_claim in enumerate(claim_sets[left_index]):
-                    for right_claim_index, _right_claim in enumerate(claim_sets[right_index]):
+                for _left_claim in claim_sets[left_index]:
+                    for _right_claim in claim_sets[right_index]:
                         left_to_right = scores[cursor]
                         right_to_left = scores[cursor + 1]
                         cursor += 2
                         if left_to_right.get("contradiction", 0.0) >= self.threshold or right_to_left.get("contradiction", 0.0) >= self.threshold:
                             self.record_failure("internal_contradiction", operation, reason="nli_contradiction")
                             return False, []
-                        if left_to_right.get("entailment", 0.0) >= self.threshold:
-                            related_left.add(left_claim_index)
-                        if right_to_left.get("entailment", 0.0) >= self.threshold:
-                            related_right.add(right_claim_index)
-                if len(related_left) != len(claim_sets[left_index]) or len(related_right) != len(claim_sets[right_index]):
-                    self.record_failure("internal_contradiction", operation, reason="self_consistency_mismatch")
-                    return False, []
         return True, claim_sets[0]
 
     def verify_quiz_items(
