@@ -150,3 +150,33 @@ def test_router_intents():
     assert route(essay).intent == "review"
     q = route("Сделай тест из 7 вопросов по теме Past Simple уровня A2")
     assert (q.intent, q.level, q.count) == ("quiz", "A2", 7) and q.topic == "Past Simple"
+
+
+def test_study_plan_endpoint_and_chat(settings, embedder, store, tmp_path):
+    client = make_client(settings, embedder, store, tmp_path)
+    headers = login(client)
+    plan = client.get("/api/plan?target=B1", headers=headers).json()
+    assert [s["level"] for s in plan["stages"]] == ["A1", "B1"]  # в тестовой карте тем уровня A2 нет
+    topics = {t["id"]: t for s in plan["stages"] for t in s["topics"]}
+    ps = topics["a1-present-simple"]
+    assert ps["materials"][0]["file"] == "web/book/present-simple.md" and ps["materials"][0]["license"] == "CC BY-SA 4.0"
+    assert topics["b1-passive"]["materials"] == [] and plan["gaps"] == ["B1 · Грамматика · Пассивный залог"]
+    assert (plan["total_topics"], plan["covered_topics"]) == (3, 2)
+    assert client.get("/api/plan?target=A1", headers=headers).json()["gaps"] == []
+    assert client.get("/api/plan?target=C2", headers=headers).status_code == 422
+
+    events = sse_events(client.post("/api/chat", json={"message": "составь программу обучения до a1"}, headers=headers))
+    assert events[0] == ("intent", {"intent": "plan"})
+    final = events[-1][1]
+    assert final["kind"] == "plan" and final["target_level"] == "A1" and len(final["stages"]) == 1
+    assert final["answer"] == "Программа обучения, уровень A1. Тем: 2, с материалами в библиотеке: 2."
+
+
+def test_router_plan_intent():
+    r = route("составь программу обучения до a2")
+    assert (r.intent, r.level, r.start_level) == ("plan", "A2", "")
+    r = route("Составь план обучения с A2 до B1")
+    assert (r.intent, r.level, r.start_level) == ("plan", "B1", "A2")
+    assert route("С чего мне начать изучение английского?").intent == "plan"
+    assert route("Сделай тест по Past Simple, A2").intent == "quiz"
+    assert route("Когда используется Present Perfect?").intent == "theory"

@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from tutor.agent.plan import build_plan, plan_summary
 from tutor.agent.quiz import TYPE_RU, Quiz
 from tutor.agent.router import route
 from tutor.llm.structured import StructuredOutputError
@@ -19,7 +20,7 @@ from tutor.services import Services, get_services
 from tutor.storage import Storage
 
 SMALLTALK = ("Здравствуйте! Я репетитор по английскому. Задайте вопрос по грамматике или лексике, "
-             "пришлите текст на проверку или попросите тест по теме.")
+             "пришлите текст на проверку, попросите тест по теме или программу обучения до нужного уровня.")
 
 
 class Credentials(BaseModel):
@@ -128,6 +129,9 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
             try:
                 if r.intent == "smalltalk":
                     payload = {"kind": "smalltalk", "answer": SMALLTALK}
+                elif r.intent == "plan":
+                    plan = build_plan(svc().settings.materials_dir, r.level or level, r.start_level)
+                    payload = {"kind": "plan", "answer": plan_summary(plan), **plan.model_dump()}
                 elif r.intent == "review":
                     result = svc().review.review(r.text).model_dump()
                     db().add_review(user, result)
@@ -207,6 +211,15 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
         result = svc().quiz.check(Quiz.model_validate(stored), body.answers).model_dump()
         result["id"] = db().add_attempt(user, result)
         return result
+
+    # ------------------------------------------------------------ программа обучения
+    @app.get("/api/plan")
+    def plan(target: str = "B1", start: str = "A1", user: str = Depends(current_user)) -> dict:
+        try:
+            result = build_plan(svc().settings.materials_dir, target, start)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        return {"answer": plan_summary(result), **result.model_dump()}
 
     # ------------------------------------------------------------ история
     @app.get("/api/history")

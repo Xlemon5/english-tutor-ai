@@ -139,6 +139,38 @@ def show_quiz_result(result: dict, key: str) -> None:
                 st.caption("Ссылка на теорию: в материалах не найдено")
 
 
+def show_plan(plan: dict, key: str, passed: dict[str, int] | None = None) -> None:
+    """Программа обучения: темы по уровням, к каждой — материалы библиотеки и переход к тесту."""
+    passed = passed or {}
+    for stage in plan["stages"]:
+        st.subheader(f"Уровень {stage['level']}")
+        area = ""
+        for t in stage["topics"]:
+            if t["area_ru"] != area:
+                area = t["area_ru"]
+                st.markdown(f"**{area}**")
+            percent = passed.get(t["title"].lower())
+            icon = "✅" if percent is not None and percent >= 70 else "📘" if t["materials"] else "⚪"
+            note = f" · тест: {percent}%" if percent is not None else "" if t["materials"] else " · материалов нет"
+            with st.expander(f"{icon} {t['title']}{note}"):
+                if not t["materials"]:
+                    st.caption("В библиотеке нет материалов по этой теме. Агент по ней не отвечает.")
+                    continue
+                for m in t["materials"]:
+                    name = f"[{m['title']}]({m['url']})" if m.get("url") else m["title"]
+                    credit = ", ".join(p for p in (m.get("author"), m.get("license")) if p)
+                    st.markdown(f"- {m['kind_ru']} · {name}  \n  :gray[{credit} · `{m['file']}`]")
+                if t["materials_total"] > len(t["materials"]):
+                    st.caption(f"Всего материалов по теме в библиотеке: {t['materials_total']}.")
+                if st.button("Пройти тест по теме", key=f"{key}-{t['id']}"):
+                    st.session_state["quiz_prefill"] = {"topic": t["title"], "level": t["level"]}
+                    for name in ("quiz", "quiz_result", "quiz_pending"):
+                        st.session_state.pop(name, None)
+                    st.switch_page(st.session_state["pages"]["quiz"])
+    if plan["gaps"]:
+        st.caption("Темы без материалов: " + "; ".join(plan["gaps"]))
+
+
 # ------------------------------------------------------------------ чат
 
 
@@ -152,6 +184,9 @@ def render_assistant(payload: dict, key: str) -> None:
             show_citations(payload["citations"], key)
     elif kind == "review":
         show_review(payload, key)
+    elif kind == "plan":
+        st.markdown(payload["answer"])
+        show_plan(payload, key)
     elif kind == "quiz":
         if payload["status"] == "no_material":
             st.warning(payload["message"], icon="⚠️")
@@ -168,8 +203,8 @@ def render_assistant(payload: dict, key: str) -> None:
 
 def page_chat() -> None:
     st.title("Чат с репетитором")
-    st.caption("Вопросы по теории — с ответами по материалам и ссылками. Можно прислать текст на проверку "
-               "или попросить тест: «Сделай тест по Past Simple, A2».")
+    st.caption("Вопросы по теории — с ответами по материалам и ссылками. Можно прислать текст на проверку, "
+               "попросить тест («Сделай тест по Past Simple, A2») или программу обучения («Программа до A2»).")
     if "chat" not in st.session_state:
         try:
             st.session_state["chat"] = api().get("/api/chat/history")
@@ -251,10 +286,14 @@ def page_review() -> None:
 
 def page_quiz() -> None:
     st.title("Тесты")
+    prefill = st.session_state.get("quiz_prefill") or {}
+    if prefill:
+        st.info(f"Тема из программы обучения: «{prefill['topic']}». Нажмите «Составить тест».")
     with st.expander("Параметры нового теста", expanded="quiz" not in st.session_state), st.form("quiz_form"):
-        topic = st.text_input("Тема", placeholder="Past Simple, articles, comparative adjectives…")
+        topic = st.text_input("Тема", value=prefill.get("topic", ""),
+                              placeholder="Past Simple, articles, comparative adjectives…")
         c1, c2 = st.columns(2)
-        level = c1.selectbox("Уровень", LEVELS, index=1)
+        level = c1.selectbox("Уровень", LEVELS, index=LEVELS.index(prefill.get("level", "A2")))
         count = c2.slider("Количество вопросов", 1, 15, 5)
         types = st.multiselect("Типы заданий", list(TYPES), default=list(TYPES), format_func=TYPES.get)
         create = st.form_submit_button("Составить тест", type="primary")
@@ -279,6 +318,7 @@ def page_quiz() -> None:
             st.error(e.message)
             return
         st.session_state.pop("quiz_result", None)
+        st.session_state.pop("quiz_prefill", None)
         if quiz["status"] == "no_material":
             st.session_state["quiz_pending"] = {**quiz, "request": request}
             st.session_state.pop("quiz", None)
@@ -320,6 +360,35 @@ def page_quiz() -> None:
             st.error(e.message)
             return
         st.rerun()
+
+
+# ------------------------------------------------------------------ программа обучения
+
+
+def page_plan() -> None:
+    st.title("Программа обучения")
+    st.caption("Темы по уровням CEFR и материалы библиотеки к каждой. Программа собирается из карты тем и "
+               "списка материалов — в ней нет ничего, чего нет в библиотеке.")
+    c1, c2 = st.columns(2)
+    start = c1.selectbox("С уровня", LEVELS, index=0)
+    target = c2.selectbox("До уровня", LEVELS, index=len(LEVELS) - 1)
+    try:
+        plan = api().get(f"/api/plan?start={start}&target={target}")
+        topics = api().get("/api/history")["topics"]
+    except ApiError as e:
+        st.error(e.message)
+        return
+    passed: dict[str, int] = {}
+    for t in topics:
+        passed[t["topic"].lower()] = max(t["percent"], passed.get(t["topic"].lower(), 0))
+    in_plan = {t["title"].lower() for stage in plan["stages"] for t in stage["topics"]}
+    done = sum(1 for name, percent in passed.items() if name in in_plan and percent >= 70)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Тем в программе", plan["total_topics"])
+    m2.metric("С материалами", plan["covered_topics"])
+    m3.metric("Пройдено тестов (от 70%)", done)
+    st.caption("📘 — материалы есть · ✅ — тест по теме пройден · ⚪ — материалов нет")
+    show_plan(plan, "plan", passed)
 
 
 # ------------------------------------------------------------------ история

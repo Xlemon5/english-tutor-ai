@@ -10,12 +10,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-Intent = Literal["theory", "review", "quiz", "smalltalk"]
+Intent = Literal["theory", "review", "quiz", "plan", "smalltalk"]
 
 _QUIZ = re.compile(r"\b(тест\w*|квиз\w*|quiz|упражнени\w*|задани[яйе]\w*|потренир\w*|вопрос\w* на)\b", re.IGNORECASE)
 _REVIEW = re.compile(r"(провер[ьи]\w*|исправ[ьи]\w*|найди ошибк\w*|check my|correct my|есть ли ошибк\w*)", re.IGNORECASE)
 _SMALLTALK = re.compile(r"^\s*(привет\w*|здравствуй\w*|добрый (день|вечер)|доброе утро|спасибо\w*|"
                         r"пока|hello|hi|thanks|thank you)[\s!.,)]*$", re.IGNORECASE)
+_PLAN = re.compile(r"(программ\w* (обучени|заняти|курс)\w*|план\w* (обучени|заняти|учеб|изучени)\w*|учебн\w+ (план|программ)\w*|"
+                   r"с чего (мне )?нач[аи]\w*|что (мне )?(нужно |надо )?(учить|изучать|выучить)|study plan|learning plan|"
+                   r"как (дойти|выйти|добраться) (до|на) уров\w*|как выучить (английский|язык))", re.IGNORECASE)
 _LEVEL = re.compile(r"\b([AА][12]|[BВ]1)\b", re.IGNORECASE)
 _COUNT = re.compile(r"\b(\d{1,2})\s*(вопрос\w*|задани\w*|question\w*)|\bиз\s+(\d{1,2})\b", re.IGNORECASE)
 _QUIZ_NOISE = re.compile(
@@ -27,6 +30,7 @@ class Route(BaseModel):
     intent: Intent
     topic: str = ""
     level: str = ""
+    start_level: str = ""  # для программы обучения: «с A2 до B1»
     count: int = 0
     text: str = ""  # текст работы для проверки
 
@@ -50,6 +54,9 @@ def route(message: str) -> Route:
     if _SMALLTALK.match(text):
         return Route(intent="smalltalk")
     words = len(text.split())
+    if _PLAN.search(text):
+        found = [m.upper().replace("А", "A").replace("В", "B") for m in _LEVEL.findall(text)]
+        return Route(intent="plan", level=found[-1] if found else "", start_level=found[0] if len(found) > 1 else "")
     if _REVIEW.search(text) and english_share(text) > 0.4:
         return Route(intent="review", text=split_review(text))
     if words >= 25 and english_share(text) > 0.9:  # длинный английский текст без вопроса — это работа

@@ -154,6 +154,28 @@ def quiz(
 
 
 @app.command()
+def plan(
+    to: str = typer.Option("B1", "--to", help="До какого уровня: A1, A2 или B1."),
+    start: str = typer.Option("A1", "--from", help="С какого уровня."),
+) -> None:
+    """Программа обучения: темы по уровням и материалы библиотеки к каждой."""
+    from tutor.agent.plan import build_plan, plan_summary
+
+    result = build_plan(get_settings().materials_dir, to, start)
+    typer.echo(plan_summary(result))
+    for stage in result.stages:
+        typer.echo(f"\n=== Уровень {stage.level}")
+        area = ""
+        for t in stage.topics:
+            if t.area_ru != area:
+                area = t.area_ru
+                typer.echo(f"\n  {area}")
+            typer.echo(f"    {'•' if t.materials else '○'} {t.title}" + ("" if t.materials else "  — материалов нет"))
+            for m in t.materials:
+                typer.echo(f"        {m.kind_ru}: {m.title} — {m.file}")
+
+
+@app.command()
 def stats() -> None:
     """Сводка по индексу."""
     s = get_settings()

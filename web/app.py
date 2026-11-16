@@ -40,6 +40,7 @@ def main() -> None:
         "chat": st.Page(views.page_chat, title="Чат", icon="💬", url_path="chat", default=True),
         "review": st.Page(views.page_review, title="Проверка работ", icon="📝", url_path="review"),
         "quiz": st.Page(views.page_quiz, title="Тесты", icon="✅", url_path="quiz"),
+        "plan": st.Page(views.page_plan, title="Программа", icon="🗺️", url_path="plan"),
         "history": st.Page(views.page_history, title="История", icon="📈", url_path="history"),
         "library": st.Page(views.page_library, title="Библиотека", icon="📚", url_path="library"),
     }
