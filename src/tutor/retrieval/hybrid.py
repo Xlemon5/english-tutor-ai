@@ -71,7 +71,9 @@ class Retriever:
 
     @property
     def bm25(self) -> BM25Index:
-        if self._bm25 is None:
+        # индекс BM25 живёт в памяти; если после индексации число фрагментов изменилось — пересобираем,
+        # чтобы работающему API не требовался перезапуск
+        if self._bm25 is None or len(self._bm25.chunks) != self.store.count():
             self.refresh()
         return self._bm25  # type: ignore[return-value]
 

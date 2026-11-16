@@ -121,3 +121,14 @@ def test_search_is_hybrid_semantic_and_lexical(settings: Settings, embedder, sto
     lexical = retriever.search(query, mode="lexical")
     assert lexical.hits and all(h.dense_rank is None and h.lexical_rank for h in lexical.hits)
     assert lexical.hits[0].chunk.id == dense.hits[0].chunk.id == hybrid.hits[0].chunk.id
+
+
+def test_running_retriever_sees_new_materials_without_restart(settings: Settings, embedder, store, materials: Path):
+    ingest(settings, embedder, store)
+    retriever = Retriever(store, embedder, settings)
+    assert not retriever.search("zeugma syllepsis figure of speech", mode="lexical").hits
+    (materials / "own" / "figures.md").write_text(
+        "# Figures\n\n## Zeugma\n\n" + "Zeugma and syllepsis are a figure of speech joining two parts. " * 4, "utf-8")
+    ingest(settings, embedder, store)
+    hits = retriever.search("zeugma syllepsis figure of speech", mode="lexical").hits
+    assert hits and hits[0].chunk.file == "own/figures.md"
