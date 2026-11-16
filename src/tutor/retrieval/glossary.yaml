@@ -1,0 +1,55 @@
+# Русские грамматические термины → английские. Запрос на русском дополняется английскими
+# терминами, чтобы находить англоязычные материалы (и по смыслу, и по точным словам BM25).
+# Ключ — регулярное выражение (без учёта регистра), значение — что добавить к запросу.
+'запят': comma commas
+'точк\w* с запятой': semicolon
+'двоеточи': colon
+'апостроф': apostrophe
+'заглавн|прописн|больш\w+ букв': capitalization capital letters
+'пунктуац|знак\w* препинания': punctuation
+'орфограф|правописан|написани\w+ слов': spelling rules
+'абзац': paragraph topic sentence
+'эссе|сочинени': essay
+'письм[оа] |письмо$|имейл|e-?mail': letter email writing
+'артикл': articles a an the
+'неопределенн\w+ артикл|неопределённ\w+ артикл': indefinite article a an
+'определенн\w+ артикл|определённ\w+ артикл': definite article the
+'множественн\w+ числ': plural nouns
+'исчисляем|неисчисляем': countable uncountable count nouns noncount
+'существительн': nouns
+'прилагательн': adjectives
+'нареч': adverbs
+'местоимен': pronouns
+'притяжательн': possessive
+'указательн': demonstrative this that these those
+'предлог': prepositions
+'союз': conjunctions
+'числительн': numerals numbers
+'глагол': verb verbs
+'неправильн\w+ глагол': irregular verbs
+'модальн': modal verbs
+'фразов\w+ глагол': phrasal verbs
+'вспомогательн': auxiliary helping verbs
+'настоящ\w+ прост|настоящее время': present simple tense
+'настоящ\w+ длительн|настоящ\w+ продолженн': present continuous progressive
+'прошедш\w+ прост|прошедшее время|прошедшем времени': past simple tense
+'прошедш\w+ длительн|прошедш\w+ продолженн': past continuous progressive
+'будущ\w+ врем|будущем времени': future tense will going to
+'времен[аи] |времён': tenses
+'пассив|страдательн\w+ залог': passive voice
+'условн\w+ предложени|условн\w+ наклонени': conditional sentences if clauses
+'косвенн\w+ реч': reported speech indirect speech
+'относительн\w+ придаточн|придаточн': relative clauses
+'разделительн\w+ вопрос': tag questions
+'вопрос\w* ': questions question formation
+'отрицани|отрицательн': negative sentences negation
+'порядок слов': word order
+'степен\w+ сравнения|сравнительн\w+ степен|превосходн\w+ степен': comparative superlative adjectives
+'герунди': gerund
+'инфинитив': infinitive
+'причасти': participle
+'повелительн': imperative
+'третье\w* лиц': third person singular
+'окончани': ending
+'словообразован|приставк|суффикс': word formation prefix suffix
+'частотност': adverbs of frequency

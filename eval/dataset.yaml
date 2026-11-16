@@ -1,0 +1,205 @@
+# Датасет для оценки RAG: вопрос, эталонный ответ и признаки для автоматической проверки.
+#
+# in_materials: true  — ответ есть в материалах:
+#   expect    — регулярное выражение; должно встретиться в пути файла, названии или разделе
+#               найденного фрагмента (проверка, что поиск нашёл нужное место);
+#   reference — эталонный ответ (с ним сравнивается ответ агента по смыслу);
+#   facts     — ключевые факты: каждое выражение должно встретиться в ответе агента.
+# in_materials: false — вопрос намеренно вне материалов, агент обязан отказать:
+#   kind: far  — тема вообще не про английский;
+#   kind: near — близкая тема (другой язык, экзамен), на которую модель «знает» ответ сама.
+#               Это главная проверка на галлюцинации: ответить и поставить ссылку здесь нельзя.
+#               Каждая такая тема проверена поиском по materials/: упоминаний в файлах нет.
+
+# ------------------------------------------------------------------ в материалах
+- q: "Когда используется Present Perfect?"
+  in_materials: true
+  expect: 'present[ -_]perfect'
+  reference: "Present Perfect (have/has + третья форма глагола) используется, когда прошлое действие связано с настоящим: важен его результат сейчас, действие началось в прошлом и продолжается до сих пор или речь идёт об опыте без указания точного времени."
+  facts: ['результат|последств|связ\w+ с настоящ|до настоящ|до сих пор|опыт|present']
+
+- q: "Как образуется пассивный залог?"
+  in_materials: true
+  expect: 'passive|страдательн'
+  reference: "Пассивный залог образуется с помощью глагола to be в нужном времени и причастия прошедшего времени (третьей формы глагола): The letter was written."
+  facts: ['to be|\bbe\b|быть|\bwas\b|\bis\b|\bare\b', 'причасти|participle|треть\w+ форм|-ed\b']
+
+- q: "Чем отличается a от an?"
+  in_materials: true
+  expect: 'article|артикл'
+  reference: "Артикль a ставится перед словами, которые начинаются с согласного звука (a book), а an — перед словами, которые начинаются с гласного звука (an apple, an hour)."
+  facts: ['согласн|consonant', '(?<!со)гласн|vowel']
+
+- q: "Когда ставится запятая перед and?"
+  in_materials: true
+  expect: 'comma'
+  reference: "Запятая ставится перед and, когда этот союз соединяет два самостоятельных предложения в составе сложного, а также перед последним элементом перечисления из трёх и более слов."
+  facts: ['независим|самостоятельн|compound|сложносочин|independent|перечисл|списк|list|series|предложени']
+
+- q: "Как образуется множественное число существительных?"
+  in_materials: true
+  expect: 'plural|числ|nouns'
+  reference: "Обычно к существительному добавляется -s (book — books); после s, x, ch, sh добавляется -es (box — boxes); согласная + y меняется на -ies (city — cities). Есть исключения: man — men, child — children."
+  facts: ['-e?s\b|оконч', '-es\b|-ies\b|исключ|men\b|children|irregular']
+
+- q: "What is the difference between some and any?"
+  in_materials: true
+  expect: 'some|determiner|quantit'
+  reference: "Some используется в утвердительных предложениях, any — в отрицательных предложениях и вопросах: I have some money. I don't have any money. Do you have any money?"
+  facts: ['утвердит|positive|affirmative', 'отрицат|вопрос|negative|question']
+
+- q: "Как образуется Past Simple у правильных глаголов?"
+  in_materials: true
+  expect: 'past[ -_]simple|simple[ -_]past'
+  reference: "У правильных глаголов Past Simple образуется добавлением окончания -ed к основе: work — worked. Если глагол оканчивается на -e, добавляется только -d (live — lived)."
+  facts: ['-?ed\b']
+
+- q: "Что такое фразовые глаголы?"
+  in_materials: true
+  expect: 'phrasal|фразов|two-word'
+  reference: "Фразовый глагол — это сочетание глагола с предлогом или наречием (частицей), которое работает как одно целое; его значение часто нельзя вывести из значений частей: give up, look after."
+  facts: ['предлог|наречи|частиц|particle|preposition|adverb']
+
+- q: "Как образуется сравнительная степень прилагательных?"
+  in_materials: true
+  expect: 'compar|степени сравнения|adjective|прилагательн'
+  reference: "У коротких прилагательных сравнительная степень образуется суффиксом -er (tall — taller), у длинных — словом more (more interesting). Есть исключения: good — better, bad — worse."
+  facts: ['-er\b', 'more']
+
+- q: "Когда в английском пишется заглавная буква?"
+  in_materials: true
+  expect: 'capitali'
+  reference: "С заглавной буквы пишутся первое слово предложения, местоимение I, имена собственные (имена людей, города, страны, языки), дни недели и месяцы."
+  facts: ['начал\w* предложен|перв\w+ слов|first word', 'собственн|имена|имен|proper|дни недели|месяц|\bI\b']
+
+- q: "Как строятся условные предложения первого типа?"
+  in_materials: true
+  expect: 'conditional|hypothetical'
+  reference: "В условном предложении первого типа в части с if используется Present Simple, а в главной части — will и инфинитив: If it rains, I will stay at home. Речь идёт о реальном условии в будущем."
+  facts: ['present simple|simple present|настоящ', 'will']
+
+- q: "В чём разница между must и have to?"
+  in_materials: true
+  expect: 'must|modal'
+  reference: "Оба выражают необходимость. Must — обязанность, которая исходит от самого говорящего, have to — внешняя необходимость (правила, обстоятельства). Mustn't означает запрет, don't have to — отсутствие необходимости."
+  facts: ['обязан|необходим|должен|obligation|necessity|запрет']
+
+- q: "Когда используется Present Continuous?"
+  in_materials: true
+  expect: 'present[ -_](continuous|progressive)'
+  reference: "Present Continuous (am/is/are + глагол с -ing) обозначает действие, которое происходит сейчас, в момент речи, временную ситуацию или запланированное действие в ближайшем будущем."
+  facts: ['сейчас|момент речи|в данный момент|в момент|now']
+
+- q: "Когда ставится апостроф?"
+  in_materials: true
+  expect: 'apostrophe|possessive'
+  reference: "Апостроф показывает принадлежность (Jen's book, the boys' room) и ставится на месте пропущенных букв в сокращениях (don't, it's)."
+  facts: ['принадлеж|possess', 'сокращ|пропущ|опущ|contraction|omission|omitted']
+
+- q: "Как задать вопрос с do и does?"
+  in_materials: true
+  expect: 'question|do-support|simple[ -_]present|present[ -_]simple|interrogative'
+  reference: "В Present Simple вопрос начинается со вспомогательного глагола do или does, затем идут подлежащее и основной глагол в начальной форме: Do you work? Does he work? Does используется с he, she, it."
+  facts: ['does', '\bhe\b|\bshe\b|третье\w* лиц|third person']
+
+- q: "Когда используется Past Continuous?"
+  in_materials: true
+  expect: 'past[ -_](continuous|progressive)'
+  reference: "Past Continuous (was/were + глагол с -ing) обозначает действие, которое длилось в определённый момент в прошлом, часто как фон для другого действия: I was reading when he called."
+  facts: ['\bwas\b|\bwere\b', '-?ing\b|длил|процесс|момент']
+
+- q: "Что такое неправильные глаголы?"
+  in_materials: true
+  expect: 'irregular'
+  reference: "Неправильные глаголы образуют прошедшее время и причастие прошедшего времени не с помощью -ed, а особыми формами, которые нужно запоминать: go — went — gone, see — saw — seen."
+  facts: ['-?ed\b|не по правил|особ|irregular|запомин|went|gone']
+
+- q: "Как образуется притяжательный падеж существительных?"
+  in_materials: true
+  expect: 'possessive|падеж|apostrophe'
+  reference: "К существительному в единственном числе добавляется 's (the boy's book). К существительным во множественном числе на -s добавляется только апостроф (the boys' books)."
+  facts: ["'s|’s|апостроф"]
+
+- q: "Какие бывают наречия частотности и где они стоят в предложении?"
+  in_materials: true
+  expect: 'frequency|adverb'
+  reference: "Наречия частотности: always, usually, often, sometimes, never. Они стоят перед смысловым глаголом (I often read), но после глагола to be (He is always late)."
+  facts: ['always|usually|often|sometimes|never', 'перед|после|before|after']
+
+- q: "Когда используется will, а когда be going to?"
+  in_materials: true
+  expect: 'going[- ]to|future|shall[- ]and[- ]will'
+  reference: "Be going to используют для заранее принятых намерений и планов и для предсказаний, основанных на том, что видно сейчас. Will — для решений, принятых в момент речи, обещаний и общих предсказаний."
+  facts: ['going to', 'will']
+
+- q: "Что такое герундий и когда он используется?"
+  in_materials: true
+  expect: 'gerund|герунд'
+  reference: "Герундий — это форма глагола с окончанием -ing, которая ведёт себя как существительное. Он бывает подлежащим и дополнением, используется после предлогов и после некоторых глаголов (enjoy, like, hate)."
+  facts: ['-?ing\b', 'существительн|noun|подлежащ|дополнен|предлог']
+
+- q: "Как образуется косвенная речь?"
+  in_materials: true
+  expect: 'indirect|reported|косвенн'
+  reference: "В косвенной речи чужие слова передаются придаточным предложением (часто с that). Если глагол в главной части стоит в прошедшем времени, время в придаточном сдвигается назад; меняются также местоимения и указания времени."
+  facts: ['сдвиг|соглас\w+ времен|backshift|прошедш|past|меня']
+
+- q: "Что такое относительные придаточные (relative clauses)?"
+  in_materials: true
+  expect: 'relative'
+  reference: "Относительное придаточное определяет или описывает существительное и вводится словами who, which, that, whose, where: The man who lives next door is a doctor."
+  facts: ['\bwho\b|\bwhich\b|\bthat\b', 'существительн|noun|определ|опис']
+
+- q: "Когда используется точка с запятой?"
+  in_materials: true
+  expect: 'semicolon'
+  reference: "Точка с запятой соединяет два тесно связанных по смыслу самостоятельных предложения без союза, а также разделяет элементы перечисления, внутри которых уже есть запятые."
+  facts: ['независим|самостоятельн|independent|предложени|связан']
+
+- q: "Какие слова по теме «еда» относятся к уровню A1?"
+  in_materials: true
+  expect: 'food|vocabulary'
+  reference: "К уровню A1 по теме Food and drink относятся, например: apple, banana, bread, breakfast, butter, cake, cheese, chicken, coffee, egg, fish."
+  facts: ['apple|banana|bread|breakfast|butter|cake|cheese|chicken|chocolate|coffee|egg|fish|dinner|drink']
+
+- q: "Как образуется Present Perfect Continuous?"
+  in_materials: true
+  expect: 'present[ -_]perfect[ -_](continuous|progressive)|uses-of-english-verb-forms'
+  reference: "Present Perfect Continuous образуется так: have/has been + глагол с окончанием -ing. Он обозначает действие, которое началось в прошлом и продолжается до настоящего момента: I have been waiting for an hour."
+  facts: ['been', '-?ing\b']
+
+- q: "Что такое исчисляемые и неисчисляемые существительные?"
+  in_materials: true
+  expect: 'count|noncount|uncount|mass|исчисляем|nouns'
+  reference: "Исчисляемые существительные можно посчитать: у них есть множественное число, и они употребляются с a/an (a book, two books). Неисчисляемые (water, information) не имеют множественного числа и с a/an не употребляются."
+  facts: ['посчитать|считать|счита|count', 'множествен|plural|a/an|артикл']
+
+- q: "What are tag questions?"
+  in_materials: true
+  expect: 'tag'
+  reference: "Tag question — короткий вопрос в конце утверждения: вспомогательный глагол и местоимение. После утвердительного предложения хвостик отрицательный, после отрицательного — утвердительный: You like tea, don't you?"
+  facts: ['вспомогательн|auxiliary|don.t you|isn.t it|хвост|конц', 'отрицат|negative|наоборот|противополож|утвердит']
+
+- q: "Когда используется определённый артикль the?"
+  in_materials: true
+  expect: 'article|артикл|\bthe\b'
+  reference: "The используется, когда собеседнику понятно, о каком именно предмете идёт речь: он уже упоминался, он единственный в своём роде (the sun) или уточнён в предложении."
+  facts: ['извест|упомина|конкретн|определ[её]нн|specific|known|единствен|unique|понятн']
+
+# ------------------------------------------------------------------ вне материалов: далёкие темы
+- {q: "Как приготовить борщ?", in_materials: false, kind: far}
+- {q: "Кто выиграл чемпионат мира по футболу в 2018 году?", in_materials: false, kind: far}
+- {q: "Как настроить Docker Compose?", in_materials: false, kind: far}
+- {q: "Объясни теорему Пифагора", in_materials: false, kind: far}
+- {q: "Какая столица Австралии?", in_materials: false, kind: far}
+- {q: "Как оформить налоговый вычет за обучение?", in_materials: false, kind: far}
+
+# ------------------------------------------------------------------ вне материалов: близкие темы
+- {q: "Расскажи о падежах в японском языке", in_materials: false, kind: near}
+- {q: "Как образуется subjunctive в испанском языке?", in_materials: false, kind: near}
+- {q: "Что такое экзамен TOEFL и как он оценивается?", in_materials: false, kind: near}
+- {q: "Сколько букв в корейском алфавите хангыль?", in_materials: false, kind: near}
+- {q: "Что такое хайку и сколько в нём слогов?", in_materials: false, kind: near}
+- {q: "Сколько падежей в немецком языке и как они называются?", in_materials: false, kind: near}
+- {q: "Какой формат у экзамена IELTS и сколько длится каждая часть?", in_materials: false, kind: near}
+- {q: "Как переводится слово serendipity и откуда оно произошло?", in_materials: false, kind: near}

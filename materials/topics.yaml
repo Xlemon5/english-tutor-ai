@@ -1,0 +1,83 @@
+# Карта тем A1–B1 (ориентир — CEFR). Используется для манифеста sources.yaml и отчёта о покрытии.
+# match — регулярные выражения (без учёта регистра); тема считается закрытой файлом,
+# если выражение найдено в названии файла-материала или в одном из его заголовков.
+
+grammar:
+  - {id: a1-to-be, level: A1, title: "Глагол to be", match: ['\bto be\b', '\bbe verb\b', 'verb to be', '\bbe\b.*simple present', 'глагол to be']}
+  - {id: a1-have, level: A1, title: "Have / have got", match: ['have got', '\bto have\b', 'verb have', 'helping verbs', '^#* *have\b']}
+  - {id: a1-present-simple, level: A1, title: "Present Simple", match: ['simple present', 'present simple']}
+  - {id: a1-present-continuous, level: A1, title: "Present Continuous", match: ['present continuous', 'present progressive']}
+  - {id: a1-pronouns, level: A1, title: "Местоимения (личные, притяжательные, указательные)", match: ['pronoun', 'местоимени', 'demonstrative']}
+  - {id: a1-articles, level: A1, title: "Артикли a/an/the", match: ['\barticles?\b', 'артикл']}
+  - {id: a1-plurals, level: A1, title: "Множественное число существительных", match: ['plural', 'число имен существительных']}
+  - {id: a1-there-is, level: A1, title: "There is / there are", match: ['there is', 'there are', 'there be', 'existential']}
+  - {id: a1-can, level: A1, title: "Can (умение, возможность)", match: ['can and could', '\bcan\b ?/ ?could', '\bcan\b.*(ability|modal)', 'ability']}
+  - {id: a1-imperative, level: A1, title: "Повелительное наклонение", match: ['imperative', 'повелительн']}
+  - {id: a1-prepositions, level: A1, title: "Предлоги места и времени", match: ['preposition', 'предлог']}
+  - {id: a1-questions-negation, level: A1, title: "Порядок слов, вопросы и отрицания", match: ['word order', '\bquestions?\b', 'interrogative', 'negation', 'negative sentences', 'do-support', 'порядок слов']}
+  - {id: a1-numerals, level: A1, title: "Числительные", match: ['numeral', '\bnumbers?\b', 'числительн', 'cardinal', 'ordinal']}
+  - {id: a2-nouns, level: A2, title: "Существительное: общие сведения", match: ['\bnouns?\b', 'существительн']}
+  - {id: a2-adjectives, level: A2, title: "Прилагательное", match: ['adjective', 'прилагательн']}
+  - {id: a2-past-simple, level: A2, title: "Past Simple", match: ['simple past', 'past simple']}
+  - {id: a2-irregular-verbs, level: A2, title: "Неправильные глаголы", match: ['irregular verb', 'неправильн\w+ глагол']}
+  - {id: a2-past-continuous, level: A2, title: "Past Continuous", match: ['past continuous', 'past progressive']}
+  - {id: a2-future, level: A2, title: "Будущее: will и be going to", match: ['going[- ]to', 'future simple', 'simple future', 'shall and will', '\bwill\b.*future', 'future.*\bwill\b', 'future tense']}
+  - {id: a2-present-perfect, level: A2, title: "Present Perfect", match: ['present perfect(?! (continuous|progressive))']}
+  - {id: a2-comparison, level: A2, title: "Степени сравнения", match: ['comparative', 'superlative', 'comparison', 'степени сравнения']}
+  - {id: a2-countable, level: A2, title: "Исчисляемые и неисчисляемые, some/any/much/many", match: ['uncountable', 'countable', 'count noun', 'mass noun', 'non-?count', 'some and any', 'much.*many', 'quantifier', 'исчисляем']}
+  - {id: a2-adverbs, level: A2, title: "Наречия (частотности, образа действия)", match: ['adverb', 'наречи']}
+  - {id: a2-modals-obligation, level: A2, title: "Must / have to / should", match: ['\bmust\b', 'have to', '\bshould\b', 'obligation', 'necessity', 'modal']}
+  - {id: a2-gerund-infinitive, level: A2, title: "Герундий и инфинитив", match: ['gerund', 'infinitive', 'verbals', 'герунди', 'инфинитив']}
+  - {id: a2-conjunctions, level: A2, title: "Союзы and/but/because/so", match: ['conjunction', 'coordinator', 'союз']}
+  - {id: a2-possessive-case, level: A2, title: "Притяжательный падеж ('s)", match: ['possessive', 'genitive', 'падеж']}
+  - {id: b1-present-perfect-continuous, level: B1, title: "Present Perfect Continuous", match: ['present perfect (continuous|progressive)']}
+  - {id: b1-past-perfect, level: B1, title: "Past Perfect", match: ['past perfect', 'pluperfect']}
+  - {id: b1-used-to, level: B1, title: "Used to", match: ['used to', 'habitual']}
+  - {id: b1-conditionals, level: B1, title: "Условные предложения 0, 1, 2 типов", match: ['conditional', 'if[- ]clause', 'условн']}
+  - {id: b1-passive, level: B1, title: "Пассивный залог", match: ['passive', 'страдательн', 'пассив']}
+  - {id: b1-reported-speech, level: B1, title: "Косвенная речь", match: ['reported speech', 'indirect speech', 'косвенн']}
+  - {id: b1-relative-clauses, level: B1, title: "Относительные придаточные", match: ['relative clause', 'relative pronoun', 'adjective clause', 'относительн']}
+  - {id: b1-modals-probability, level: B1, title: "Модальные глаголы вероятности (may, might, could)", match: ['\bmight\b', 'may and might', 'possibility', 'probability', 'deduction']}
+  - {id: b1-tag-questions, level: B1, title: "Разделительные вопросы", match: ['tag question', 'question tag', 'разделительн']}
+  - {id: b1-phrasal-verbs, level: B1, title: "Фразовые глаголы", match: ['phrasal verb', 'фразов']}
+  - {id: b1-future-forms, level: B1, title: "Другие способы выражения будущего", match: ['future (continuous|progressive|perfect)', 'expressing the future', 'present (continuous|progressive).*future', 'future time']}
+  - {id: b1-articles-advanced, level: B1, title: "Артикли: сложные случаи", match: ['zero article', 'отсутствие артикля', 'употребление \w+ артикля', 'definite article', 'geographic']}
+
+vocabulary:
+  - {id: a1-personal-family, level: A1, title: "Знакомство, личная информация, семья", match: ['personal (information|identification)', 'family', 'greeting', 'introduc']}
+  - {id: a1-time-dates, level: A1, title: "Время и даты", match: ['time and date', 'days of the week', 'telling (the )?time', '\bdates?\b']}
+  - {id: a1-colours, level: A1, title: "Цвета", match: ['colou?rs?\b']}
+  - {id: a1-food, level: A1, title: "Еда и напитки", match: ['food']}
+  - {id: a1-home, level: A1, title: "Дом и предметы", match: ['house and home', 'objects and rooms', '\brooms?\b', 'furniture']}
+  - {id: a1-daily-routine, level: A1, title: "Распорядок дня", match: ['daily (life|routine)']}
+  - {id: a1-weather, level: A1, title: "Погода", match: ['weather']}
+  - {id: a1-clothes, level: A1, title: "Одежда", match: ['cloth(es|ing)']}
+  - {id: a1-town, level: A1, title: "Город и места", match: ['things in the town', '^#* *places', 'in the city', 'directions']}
+  - {id: a2-travel-transport, level: A2, title: "Путешествия и транспорт", match: ['travel', 'transport']}
+  - {id: a2-shopping, level: A2, title: "Покупки", match: ['shopping']}
+  - {id: a2-health, level: A2, title: "Здоровье и тело", match: ['health', 'body']}
+  - {id: a2-work, level: A2, title: "Работа и профессии", match: ['work and jobs', '\bjobs?\b', 'occupation']}
+  - {id: a2-hobbies, level: A2, title: "Хобби и свободное время", match: ['hobb', 'leisure', 'free time']}
+  - {id: a2-education, level: A2, title: "Образование", match: ['education', 'school']}
+  - {id: a2-describing-people, level: A2, title: "Описание людей (внешность, характер)", match: ['describing people', 'appearance', 'personality']}
+  - {id: b1-feelings-opinions, level: B1, title: "Чувства и мнения", match: ['feelings', 'emotions', 'opinions?\b']}
+  - {id: b1-media-technology, level: B1, title: "Медиа и технологии", match: ['\bmedia\b', 'technolog', 'internet', 'computer']}
+  - {id: b1-environment, level: B1, title: "Окружающая среда и природа", match: ['natural environment', '\bnature\b', 'ecolog', 'climate', 'pollution']}
+  - {id: b1-relationships, level: B1, title: "Отношения между людьми", match: ['relations with other people', 'relationship', 'friendship']}
+  - {id: b1-culture, level: B1, title: "Культура, искусство, книги", match: ['\barts?\b', 'books and literature', 'culture', '\bfilm']}
+  - {id: b1-word-formation, level: B1, title: "Словообразование", match: ['prefix', 'suffix', 'word formation', 'affix', 'словообразован']}
+  - {id: b1-collocations, level: B1, title: "Частые сочетания слов", match: ['collocation']}
+
+writing:
+  - {id: a1-capitalization, level: A1, title: "Заглавные буквы", match: ['capitali[sz]ation', 'capital letters?', 'заглавн']}
+  - {id: a1-end-punctuation, level: A1, title: "Точка, вопросительный и восклицательный знаки", match: ['end marks', 'end punctuation', 'full stop', '\bperiods?\b', 'question mark']}
+  - {id: a1-simple-sentence, level: A1, title: "Простое предложение", match: ['what is a sentence', 'sentences? overview', 'basic components', 'subject and predicate', 'parts of an? english sentence', 'sentence writing', 'components of a sentence']}
+  - {id: a2-commas, level: A2, title: "Запятая", match: ['\bcommas?\b']}
+  - {id: a2-apostrophes, level: A2, title: "Апостроф", match: ['apostrophe']}
+  - {id: a2-linking-words, level: A2, title: "Слова-связки и вводные слова", match: ['transition', 'linking word', 'connector', 'conjunctive adverb', 'subordinat']}
+  - {id: a2-paragraph, level: A2, title: "Абзац", match: ['paragraph']}
+  - {id: a2-spelling, level: A2, title: "Орфография (окончания -s, -ed, -ing)", match: ['spelling', 'orthograph', 'орфограф']}
+  - {id: a2-letter-email, level: A2, title: "Неформальное письмо и email", match: ['(informal|personal) (letter|e-?mail)', 'letter writing', 'writing (a|an) (letter|e-?mail)', 'e-?mails?\b']}
+  - {id: b1-essay, level: B1, title: "Структура эссе", match: ['essay', 'thesis statement']}
+  - {id: b1-formal-informal, level: B1, title: "Формальный и неформальный стиль", match: ['formal (and|vs\.?|or) informal', '\bregister\b', 'formality', 'formal (letter|e-?mail|writing)']}
+  - {id: b1-complex-punctuation, level: B1, title: "Пунктуация сложного предложения", match: ['semicolon', '\bcolons?\b', 'compound sentence', 'complex sentence', 'run-on', 'comma splice', 'fragment']}

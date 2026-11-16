@@ -1,0 +1,273 @@
+---
+title: English conditional sentences
+source: Wikipedia
+source_url: https://en.wikipedia.org/wiki/English_conditional_sentences
+author: Wikipedia contributors
+history_url: https://en.wikipedia.org/w/index.php?title=English_conditional_sentences&action=history
+license: CC BY-SA 4.0
+license_url: https://creativecommons.org/licenses/by-sa/4.0/
+retrieved: '2026-11-16'
+language: en
+---
+
+# English conditional sentences
+
+Prototypical **conditional sentences in English** are those of the form *"If X, then Y".* The clause *X* is referred to as the *antecedent* (or *protasis*), while the clause *Y* is called the *consequent* (or *apodosis*). A conditional is understood as expressing its consequent under the temporary hypothetical assumption of its antecedent.
+
+Conditional sentences can take numerous forms. The consequent can precede the "if"-clause and the word "if" itself may be omitted or replaced with a different complementizer. The consequent can be a declarative, an interrogative, or an imperative. Special tense morphology can be used to form a counterfactual conditional. Some linguists have argued that other superficially distinct grammatical structures such as wish reports have the same underlying structure as conditionals.
+
+Conditionals are one of the most widely studied phenomena in formal semantics, and have also been discussed widely in philosophy of language, computer science, decision theory, among other fields.
+
+## Overview
+
+In English conditional sentences, the antecedent (protasis) is a dependent clause, most commonly introduced by the complementizer *if*. Other complementizers may also be used, such as *whenever*, *unless*, *provided (that)*, and *as long as*. Certain condition clauses can also be formulated using inversion without any conjunction; see § Inversion in condition clauses below.
+
+The consequent clause, expressing the consequence of the stated condition, is generally a main clause. It can be a declarative, interrogative, or imperative clause. It may appear before or after the condition clause:
+
+- If I see him, I will tell him. (declarative sentence, condition first)
+- I will tell him if I see him. (declarative sentence, condition second)
+- If you saw him, would you tell him? (interrogative sentence, condition first)
+- Would you tell him if you saw him? (interrogative sentence, condition second)
+- If you see it, photograph it. (imperative sentence, condition first)
+- Photograph it if you see it. (imperative sentence, condition second)
+
+As with other dependent clauses in written English, it is common for a comma to be used to separate the clauses if the dependent clause comes first (as is done in the above examples). See Comma § Separation of clauses.
+
+It is possible for the consequence clause to appear alone in a sentence, without a condition clause, if the condition has been previously stated or is understood from the context. It may also be shortened by verb phrase ellipsis; a minimal conditional sentence could therefore be something like "Would you?" or "I would." This phenomenon is known as modal subordination.
+
+## Counterfactual conditionals
+
+Like other languages, English uses *past tense* morphology to indicate that the speaker regards the antecedent as impossible or unlikely. This use of past tense is often referred to as *fake past* since it does not contribute its ordinary temporal meaning. Conditionals with fake past marking go by various names including *counterfactuals*, *subjunctives*, and *X-marked conditionals*.
+
+- **Indicative**: If it *is* raining in New York, then Mary is at home.
+- **Counterfactual**: If it *was* raining in New York, then Mary would be at home.
+
+In older dialects and more formal registers, the form "were" is often used instead of "was". Counterfactuals of this sort are sometimes referred to as *were'd up conditionals*.
+
+- **Were'd up**: If I were king, I could have you thrown in the dungeon.
+
+The form "were" can also be used with an infinitive to form a *future less vivid* conditional.
+
+- **Future Less Vivid**: If I were to be king, I could have you thrown in the dungeon.
+
+Counterfactuals can also use the pluperfect instead of the past tense.
+
+- **Conditional perfect**: If you had called me, I would have come.
+
+## English language teaching
+
+In English language teaching, conditional sentences are often classified under the headings **zero conditional**, **first conditional** (or *conditional I*), **second conditional** (or *conditional II*), **third conditional** (or *conditional III*) and **mixed conditional**, according to the grammatical pattern followed, particularly in terms of the verb tenses and auxiliaries used.
+
+### Zero conditional
+
+"Zero conditional" refers to conditional sentences that express a factual implication, rather than describing a hypothetical situation or potential future circumstance (see Types of conditional sentence). The term is used particularly when both clauses are in the present tense; however such sentences can be formulated with a variety of tenses/moods, as appropriate to the situation:
+
+- If you don't eat for a long time, you become hungry.
+- If the alarm goes off, there's a fire somewhere in the building.
+- If you are going to sit an exam tomorrow, go to bed early tonight!
+- If aspirins will cure it, I'll take a couple tonight.
+- If you make a mistake, someone lets you know.
+
+The first of these sentences is a basic zero conditional with both clauses in the present tense. The fourth is an example of the use of *will* in a condition clause (for more such cases, see below). The use of verb tenses, moods and aspects in the parts of such sentences follows general principles, as described in Uses of English verb forms.
+
+Occasionally, mainly in a formal and somewhat archaic style, a subjunctive is used in the zero-conditional condition clause (as in "If the prisoner **be** held for more than five days, ...). For more details see English subjunctive. (See also § Inversion in condition clauses below.)
+
+### First conditional
+
+"First conditional" or "conditional I" refers to a pattern used in predictive conditional sentences, i.e. those that concern consequences of a probable future event (see Types of conditional sentence). In the basic first conditional pattern, the condition is expressed using the present tense (having future meaning in this context). In some common fixed expressions or in old-fashioned or formal contexts, the present subjunctive is occasionally found. For example:*If need be, we'll rent a car.* see use of the present subjunctive), and the consequence using the future construction with *will* (or *shall*):
+
+- If you make a mistake, someone will let you know.
+- If he asks me, I will/shall consider his proposal carefully.
+
+The use of present tense in dependent clauses with future time reference is not confined to condition clauses; it also occurs in various temporal and relative clauses (*as soon as he arrives*; *take the first train that comes*; etc.), as described under Uses of English verb forms § Dependent clauses.
+
+The present tense used in the condition clause may take the form of the simple present as in the above examples, or the present progressive, present perfect or present perfect progressive as appropriate (according to general principles for uses of English verb forms):
+
+- If he **is sleeping** when we arrive, we shan't wake him. (present progressive)
+- Will you wake him if he **hasn't stirred** by 10 o'clock? (present perfect)
+- If you **have been working** for more than ten hours when he returns, he will take your place. (present perfect progressive)
+
+The condition can also be expressed using the modal verb *should*. This form can be used to make an inverted condition clause without a conjunction:
+
+- If you should make a mistake, ... (equivalent to "If you make a mistake")
+- Should you make a mistake, ... (inverted form equivalent to the above).
+- If you should be young, ... (equivalent to "If you are young")
+- Should you be young, ... (inverted form equivalent to the above)
+
+Otherwise, the condition clause in a first conditional pattern is not normally formed with a modal verb, other than *can*. However, there are certain situations (often involving polite expressions) where *will*, *would* and *could* may be used in such clauses; see § Use of will and would in condition clauses below. For the occasional use of the subjunctive in the condition clause, see under zero conditional above. In colloquial English, an imperative may be used with the meaning of a condition clause, as in "go eastwards a mile and you'll see it" (meaning "if you go eastwards a mile, you will see it").
+
+Although the consequence in first conditional sentences is usually expressed using the *will* (or *shall*) future (usually the simple future, though future progressive, future perfect and future perfect progressive are used as appropriate), other variations are also possible – it may take the form of an imperative, it may use another modal verb that can have future meaning, or it may be expressed as a deduction about present or past time (consequent on a possible future event):
+
+- If it rains this afternoon, come round to my place! (imperative)
+- If it rains this afternoon, we can/could/should/may/might find somewhere to shelter. (other modals)
+- If it rains this afternoon, then yesterday's weather forecast was wrong. (deduction about the past)
+- If it rains this afternoon, your garden party is doomed. (deduction placed in the present)
+
+A particular case involves a condition clause that expresses a goal (this is often done using the *be + to* construction, the *going-to* future or the verb *want*), and the main clause expresses something that is necessary for the achievement of that goal, usually using a modal verb of necessity or obligation. In this case it is effectively the main clause, rather than the dependent condition clause, that expresses a "condition".
+
+- If we want to succeed, we have to try harder.
+- If you are to get your pocket money, you must start behaving yourself.
+
+As noted in the following section, it may be possible to express a statement about a hypothetical future situation using either the first or second conditional pattern, with little specific difference in meaning.
+
+### Second conditional
+
+"Second conditional" or "conditional II" refers to a pattern used to describe hypothetical, typically counterfactual situations with a present or future time frame (for past time frames the third conditional is used). In the normal form of the second conditional, the condition clause is in the past tense (although it does not have past meaning—see Use of the past subjunctive), and the consequence is expressed using the conditional construction with the auxiliary *would*:
+
+- If I liked parties, I would attend more of them.
+- If it rained tomorrow, people would dance in the street.
+
+The past tense (simple past or past progressive) of the condition clause is historically the past subjunctive. In modern English this is identical to the past indicative, except in the first and third persons singular of the verb *be*, where the indicative is *was* and the subjunctive *were*; *was* is sometimes used as a colloquialism (*were* otherwise preferred), although the phrase *if I were you* is common in colloquial language. For more details see English subjunctive § Use of the past subjunctive.
+
+- If I (he, she, it) were rich, there would be plenty of money available for this project.
+- If I (he, she, it) were speaking, you would not be allowed to interrupt like that.
+
+When *were* is the verb of the condition clause, it can be used to make an inverted condition clause without a conjunction. If the condition clause uses the past tense of another verb, it may be replaced by the auxiliary construction *were to* + infinitive (particularly if it has hypothetical future reference); if this is done, then inversion can be applied here too:
+
+- If I were rich, ... / If I were to be rich, ... / Were I (to be) rich, ...
+- If I flew, ... / If I were to fly, ... / Were I to fly, ...
+
+Another possible pattern is *if it weren't for...* (inverted form: *were it not for ...*), which means something like "in the absence of ...". For clauses with *if only*, see Uses of English verb forms § Expressions of wish.
+
+For the possible use of *would* or *could* in the condition clause as well, see § Use of will and would in condition clauses below.
+
+The conditional construction of the main clause is usually the simple conditional; sometimes the conditional progressive (e.g. *would be waiting*) is used. Occasionally, with a first person subject, the auxiliary *would* is replaced by *should* (similarly to the way *will* is replaced by *shall*). Also, *would* may be replaced by another appropriate modal: *could*, *should*, *might*.
+
+When referring to hypothetical future circumstance, there may be little difference in meaning between the first and second conditional (factual vs. counterfactual, realis vs. irrealis). The following two sentences have similar meaning, although the second (with the second conditional) implies less likelihood that the condition will be fulfilled:
+
+- If you leave now, you will still catch your train.
+- If you left now, you would still catch your train.
+
+Notice that in indirect speech reported in the past tense, the first conditional naturally changes to the second:
+
+- She'**ll kill** me if she **finds** out.
+- He said I **would kill** him if I **found** out.
+
+### Third conditional
+
+"Third conditional" or "conditional III" is a pattern used to refer to hypothetical situations in a past time frame, generally counterfactual (or at least presented as counterfactual). Here the condition clause is in the past perfect, and the consequence is expressed using the conditional perfect.
+
+- If you had called me, I would have come.
+- Would he have succeeded if I had helped him?
+
+It is possible for the usual auxiliary construction to be replaced with *were to have* + past participle. That used, the above examples can be written as such:
+
+- If you were to have called me, I would have come.
+- Would he have succeeded if I were to have helped him?
+
+The condition clause can undergo inversion, with omission of the conjunction:
+
+- Had you called me, I would have come. / Were you to have called me, I would have come.
+- Would he have succeeded had I helped him? / Would he have succeeded were I to have helped him?
+
+Another possible pattern (similar to that mentioned under the second conditional) is *if it hadn't been for...* (inverted form: *had it not been for ...*), which means something like "in the absence of ...", with past reference. For clauses with *if only*, see Uses of English verb forms § Expressions of wish.
+
+For the possible use of *would* in the condition clause, see § Use of will and would in condition clauses. Occasionally, with a first person subject, *would* is replaced with *should*. In the main clause, the auxiliary *would* can be replaced by *could* or *might*, as described for the second conditional.
+
+If only one of the two clauses has past reference, a mixed conditional pattern (see below) is used.
+
+### Mixed conditional
+
+"Mixed conditional" usually refers to a mixture of the second and third conditionals (the counterfactual patterns). Here either the condition or the consequence, but not both, has a past time reference.
+
+When the condition refers to the past, but the consequence to the present, the condition clause is in the past perfect (as with the third conditional), while the main clause is in the conditional mood as in the second conditional (i.e. simple conditional or conditional progressive, but not conditional perfect).
+
+- If you had done your job properly, we wouldn't be in this mess now.
+- If I hadn't married Kelly, I wouldn't be living in Scotland now.
+
+When the consequence refers to the past, but the condition is not expressed as being limited to the past, the condition clause is expressed as in the second conditional (past, but not past perfect), while the main clause is in the conditional perfect as in the third conditional:
+
+- If we were soldiers, we wouldn't have done it like that.
+
+Other variations on the respective clause patterns are possible, as used accordingly in the second and third conditionals.
+
+#### Contradiction between the zero and first conditional
+
+There is a problem when the condition refers to the **present**, but the consequence to the **future**, as in these examples:
+
+- *If you are young, you will like that book.*    (I do not know how old you are.)
+- *If you are already so good at it, you will be a master in one year.*
+- *If he is already here, you will find him.*
+
+Formally, every sentence above looks like the first conditional, with the condition having future meaning, which was not our intention. Generally, context and auxiliary words like "already", "at present", etc. sometimes are enough to inform us that the condition has **present** meaning, but sometimes are not, which leads to ambiguity, for example:
+
+- *If you do it now, you will not have to do it later.*
+
+The word "now" can be interpreted as "at present" or "in the immediate future". Hence, the condition can refer both to the present and future.
+
+## Use of *will* and *would* in condition clauses
+
+As noted above regarding the first conditional, *will* (or *shall*) is not normally used to mark future time reference in a condition clause; instead an ordinary present tense is used:
+
+- If she wins (*not:* will win) tomorrow, I'll eat my hat.
+
+However, there are certain situations where *will* can appear in a condition clause. One type of situation is referred to above under zero conditional, where *will* expresses futurity, but the sentence as a whole expresses factual implication rather than a potential future circumstance: "If aspirins will cure it, I'll take a couple tonight" (the taking is not a consequence of the curing, but a consequence of the expectation that they will cure).
+
+More commonly, *will* appears in condition clauses where it has a modal meaning, rather than marking the future. (See uses of *will*.) Relevant meanings include willingness, persistence, or strong disapproval:
+
+- If you will excuse me, I think I will slip into something more comfortable. (willingness)
+- If you *will* keep all the windows shut, of course you'll get headaches. (persistence)
+- A: The zookeeper was really annoyed with me.
+- B: Well, if you will throw stones at the animals, it's not surprising! (strong disapproval)
+
+In the second and third sentences *will* is stressed, and cannot be contracted to "'ll".
+
+Similarly, *would* is not generally used in the condition clauses of the counterfactual patterns (second and third conditional) in standard English:
+
+- If I knew (*not:* would know) him, I would talk to him.
+- If you had written (*not:* would have written), it would have put my mind at rest.
+
+However, some varieties of English regularly use *would* (contracted to  *'d*) and *would have* (*'d have*) in counterfactual condition clauses, although this is often considered non-standard:
+
+- If you'd leave (*standard:* you left) now, you'd be on time.
+- If you'd have told (*standard:* you had told) me, we could've done something about it.
+
+Such use of *would* is widespread especially in spoken American English in all sectors of society. It is not usually found in more formal writing; however some sources describe it as acceptable US English, no longer labeling it colloquial.
+
+There are also cases where *would* can appear in the condition clause in British English too, but these can be considered to be modal uses of *would*, indicating willingness:
+
+- If you **would listen** to me once in a while, you might learn something.
+
+Also, in cases where the event of the *if*-clause follows that of the main clause, use of *would* in the *if*-clause is standard usage (this is similar to the aspirin example given above for *will*):
+
+- If it **would make** Bill happy, I would give him the money.
+
+*Would like* and *could* are sometimes used in condition clauses for politeness:
+
+- I'll make a pot of tea if you **would like** some.
+- Please help Mrs Brown if you **could**.
+
+For the use of *should* in future condition clauses, see under first conditional.
+
+## Inversion in condition clauses
+
+Certain condition clauses (*if*-clauses) can be cast without any conjunction such as *if* or *unless*, instead using subject–auxiliary inversion to indicate their meaning.
+
+The principal constructions are as follows:
+
+- In the first conditional (where the condition clause expresses a possible future condition), inversion can be applied to the form of the condition clause constructed using *should*:
+
+  :   If you feel hungry, ... (usual condition clause; present tense with future meaning)
+  :   If you should feel hungry, ... (*should* form of the condition clause)
+
+- :   **Should you** feel hungry, ... (inverted form)
+
+- In the second conditional (where the condition clause expresses an unlikely or counterfactual present/future condition; this may also occur in the mixed conditional), inversion is possible in the case where the verb is *were* – the past subjunctive:
+
+  :   If she were here, ... (usual condition clause)
+  :   **Were she** here, ...(inverted form)
+- As a special case of the above, when a condition clause based on a different verb (normally with hypothetical future reference) is formulated using the *were to* construction, inversion is again possible (provided *were* and not *was* is used):
+
+  :   If you shot, ... (usual condition clause; past tense)
+  :   If you were to shoot, ... (*were to* construction)
+  :   **Were you** to shoot, ... (inverted form)
+- In the third conditional (where the condition clause expresses a counterfactual past condition; this may also occur in the mixed conditional), the condition clause formed with the auxiliary *had* can be inverted:
+
+  :   If he had written, ... (usual condition clause; past perfect)
+  :   **Had he** written, ... (inverted form)
+- The above can be written with the *were to have* construction, inversion once again possible.
+
+  :   If he were to have written, ... (*were to have* construction)
+  :   **Were he** to have written, ... (inverted form)
+
+Inversion is also possible when the present subjunctive *be* is used (e.g. "Be he called on by God..." for "If he be called on by God..."), but this is archaic usage for condition clauses; it is still occasionally found in dependent clauses expressing "no matter whether ...", e.g. "Be they friend or foe ..." (equivalent to "Whether they be friend or foe ..."). For similar examples see English subjunctive.

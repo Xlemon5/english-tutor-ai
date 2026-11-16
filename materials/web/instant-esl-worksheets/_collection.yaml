@@ -1,0 +1,12 @@
+# Общие метаданные коллекции (читает `tutor manifest`).
+# Лицензия проверена по тексту каждого PDF: «Licensed under CC BY 4.0».
+source: Instant ESL Worksheets
+source_url: https://instanteslworksheets.com
+author: Instant ESL Worksheets
+license: CC BY 4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+# Файлы скопированы из локальной папки пользователя; исходная дата загрузки с сайта неизвестна.
+retrieved: '2026-11-16'
+language: en
+kind: worksheet
+filename_pattern: '^(?P<id>ESL-\d+)_(?P<title>.+)_(?P<level>[ABC]\d(?:-[ABC]\d)?)$'

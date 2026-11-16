@@ -1,10 +1,69 @@
-version: "3.8"
+# docker compose up            — API, веб-интерфейс и ChromaDB; LLM и эмбеддинги — Ollama на хосте
+# docker compose --profile ollama up — то же, но Ollama тоже в контейнере (на macOS только CPU, медленно)
+name: english-tutor
+
+x-app: &app
+  build: .
+  image: english-tutor:latest
+  env_file: [.env]
+  volumes:
+    - ./materials:/app/materials
+    - ./data:/app/data
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
 services:
+  # Версия образа совпадает с версией библиотеки chromadb в uv.lock: сервер читает тот же каталог
+  # data/chroma, что и встроенный режим, поэтому индекс, собранный локально (make ingest), виден сразу.
+  # Не запускайте локальный `tutor ingest` одновременно с контейнером chromadb.
+  chromadb:
+    image: chromadb/chroma:1.5.9
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data/chroma:/data
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    environment:
+      OLLAMA_BASE_URL: ${COMPOSE_OLLAMA_URL:-http://host.docker.internal:11434}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on: [chromadb]
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    command: ["streamlit", "run", "web/app.py", "--server.port=8501", "--server.address=0.0.0.0",
+              "--server.headless=true", "--browser.gatherUsageStats=false"]
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on: [api]
+    restart: unless-stopped
+
+  # Индексация внутри контейнеров: docker compose run --rm ingest
+  ingest:
+    <<: *app
+    profiles: [tools]
+    command: ["tutor", "ingest"]
+    environment:
+      OLLAMA_BASE_URL: ${COMPOSE_OLLAMA_URL:-http://host.docker.internal:11434}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+    depends_on: [chromadb]
+
+  # Как в схеме-образце: Ollama в контейнере. Включается профилем, вместе с
+  # COMPOSE_OLLAMA_URL=http://ollama:11434 в .env. Порт наружу — 11435, чтобы не мешать Ollama хоста.
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama
+    profiles: [ollama]
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
