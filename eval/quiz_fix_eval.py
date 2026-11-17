@@ -83,7 +83,9 @@ class Recorder:
 def build_agent(calls: list):
     # подмена остаётся на всё время работы скрипта: агент создаёт модели в момент генерации, а не при сборке
     real = services.get_chat_model
-    services.get_chat_model = lambda *a, **k: Recorder(real(*a, **k), calls)
+    # записываются только JSON-вызовы (со схемой); модель чата остаётся как есть — её цепочке нужен Runnable
+    services.get_chat_model = lambda *a, **k: (Recorder(real(*a, **k), calls) if k.get("schema") is not None
+                                               else real(*a, **k))
     return services.build_services(get_settings()).quiz
 
 
