@@ -72,6 +72,17 @@ def test_question_schema_validation():
     assert LLMQuestion.model_validate({**GAP, "options": ["x"]}).options == []
 
 
+def test_answer_copied_into_choice_prompt_becomes_gap():
+    # так отвечает Qwen 7B на Present Perfect: пример из Википедии с ответом, выделенным **
+    copied = {**MC, "prompt": "I **have written** a letter this morning.",
+              "options": ["have written", "wrote", "written"], "answer": "have written"}
+    assert LLMQuestion.model_validate(copied).prompt == "I ____ a letter this morning."
+    with pytest.raises(ValidationError):  # у заполнения пропуска так нельзя — пропала бы подсказка в скобках
+        LLMQuestion.model_validate({**GAP, "prompt": "He watches TV."})
+    with pytest.raises(ValidationError):  # ответа в предложении нет — чинить нечего
+        LLMQuestion.model_validate({**MC, "prompt": "She is in a bank."})
+
+
 def test_check_scores_and_uses_judge_for_free_answers(retriever):
     agent = agent_with(retriever, {"questions": [MC, GAP, FIX, TR]},
                        {"correct": True, "comment": "Предлог at тоже подходит."})
@@ -100,3 +111,4 @@ def test_text_answers_ignore_case_punctuation_and_contractions(retriever):
     assert normalize("He DOESN'T like it.") == normalize("he does not like it")
     assert normalize("I'm here, it’s OK") == normalize("I am here it is ok")
     assert normalize("They can't swim") == normalize("they cannot swim")
+

@@ -6,7 +6,7 @@ import uuid
 from typing import Literal
 
 from loguru import logger
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from tutor.agent.theory import NO_MATERIAL_TEXT, format_context, suggest_topics
 from tutor.lexicon import load_vocab, words_above_level
@@ -35,13 +35,22 @@ class LLMQuestion(BaseModel):
     @model_validator(mode="after")
     def check_format(self) -> LLMQuestion:
         self.prompt = re.sub(r"_{3,}", "____", self.prompt).strip()
+        self.prompt = re.sub(r"\*\*(.+?)\*\*", r"\1", self.prompt)  # выделение из фрагментов Википедии
         self.options = [o.strip() for o in self.options if o.strip()]
         self.answer = self.answer.strip()
+        if self.type == "multiple_choice" and "____" not in self.prompt and self.answer:
+            # модель часто копирует пример из фрагмента вместе с ответом — ставим пропуск на его место;
+            # варианты остаются подсказкой, поэтому вопрос не портится
+            pattern = re.compile(r"(?<!\w)" + re.escape(self.answer) + r"(?!\w)", re.IGNORECASE)
+            if len(pattern.findall(self.prompt)) == 1:
+                self.prompt = pattern.sub("____", self.prompt)
         if self.type == "multiple_choice":
-            if not 3 <= len(self.options) <= 4 or len({o.lower() for o in self.options}) != len(self.options):
+            if not 3 <= len(self.options) <= 4 or len({normalize(o) for o in self.options}) != len(self.options):
                 raise ValueError("multiple_choice: нужно 3–4 разных варианта")
-            if self.answer.lower() not in {o.lower() for o in self.options}:
+            same = [o for o in self.options if normalize(o) == normalize(self.answer)]
+            if not same:
                 raise ValueError("multiple_choice: ответ должен совпадать с одним из вариантов")
+            self.answer = same[0]  # «Has been waiting.» и «has been waiting» — один вариант
         else:
             self.options = []
         if self.type in ("multiple_choice", "fill_gap") and self.prompt.count("____") != 1:
@@ -112,6 +121,11 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def question_key(prompt: str) -> str:
+    """Ключ для поиска повторов: одно и то же предложение с разными пояснениями в скобках — повтор."""
+    return normalize(re.sub(r"\([^)]*\)", " ", prompt))
+
+
 def plan_types(n: int, types: list[str]) -> list[str]:
     return [types[i % len(types)] for i in range(n)]
 
@@ -144,6 +158,7 @@ class QuizAgent:
 
         accepted: list[LLMQuestion] = []
         seen: set[str] = set()
+        rejected: list[str] = []  # причины отказа — подсказка модели в следующем раунде
         wanted = plan_types(n, types)
         for _ in range(MAX_ROUNDS):
             missing = list(wanted)
@@ -155,6 +170,11 @@ class QuizAgent:
             avoid = ""
             if accepted:
                 avoid = "Не повторяй эти задания:\n" + "\n".join(f"- {q.prompt}" for q in accepted) + "\n"
+            if rejected:
+                # без этого при температуре 0 модель на тот же запрос вернёт те же ошибки
+                avoid += ("Прошлые задания отклонены, исправь ошибки:\n"
+                          + "\n".join(f"- {r}" for r in dict.fromkeys(rejected)) + "\n")
+                rejected.clear()
             user = load_prompt("quiz_user").format(
                 topic=topic, level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid, context=context)
             try:
@@ -166,15 +186,23 @@ class QuizAgent:
             for item in raw.questions:
                 try:
                     q = LLMQuestion.model_validate(item)
-                except Exception as e:  # noqa: BLE001
-                    logger.info("вопрос отброшен: {}", str(e)[:200])
+                except ValidationError as e:
+                    reasons = [err["msg"].removeprefix("Value error, ") for err in e.errors()]
+                    logger.info("вопрос отброшен (формат): {}", "; ".join(reasons))
+                    rejected += reasons
                     continue
-                key = normalize(q.prompt)
+                if q.type not in pending:
+                    continue  # вопрос сверх плана — не ошибка модели
+                key = question_key(q.prompt)
+                if key in seen:
+                    logger.info("вопрос отброшен (повтор): {}", q.prompt)
+                    rejected.append(f"задание повторяет уже составленное: {q.prompt}")
+                    continue
                 english = q.answer + " " + " ".join(q.options) + (" " + q.prompt if q.type != "translation" else "")
-                if q.type not in pending or key in seen:
-                    continue
-                if len(words_above_level(english, level, vocab)) > MAX_HARD_WORDS:
-                    logger.info("вопрос отброшен (лексика выше {}): {}", level, q.prompt)
+                hard = words_above_level(english, level, vocab)
+                if len(hard) > MAX_HARD_WORDS:
+                    logger.info("вопрос отброшен (лексика выше {}: {}): {}", level, ", ".join(hard), q.prompt)
+                    rejected.append(f"слова сложнее уровня {level} ({', '.join(hard)}) — замени их простыми")
                     continue
                 pending.remove(q.type)
                 seen.add(key)
