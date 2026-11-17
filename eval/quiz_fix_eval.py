@@ -109,6 +109,45 @@ def judge(quiz: dict) -> list[dict] | None:
         return None
 
 
+SOLVER_SYSTEM = """Ты сдаёшь тест по английскому языку. Реши каждое задание.
+- multiple_choice: верни ровно один вариант из списка, слово в слово;
+- fill_gap: верни слово или слова, которые нужно вставить в пропуск ____;
+- error_correction: верни исправленное предложение целиком;
+- translation: верни перевод на английский."""
+SOLVER_SCHEMA = {"type": "object", "properties": {"answers": {"type": "array", "items": {
+    "type": "object", "properties": {"id": {"type": "integer"}, "answer": {"type": "string"}},
+    "required": ["id", "answer"]}}}, "required": ["answers"]}
+
+
+def solve(quiz: dict) -> list[str | None] | None:
+    """Слепое решение: модель отвечает на задания, не видя эталона (T=0, seed 0, свой промпт)."""
+    from tutor.llm.base import get_chat_model
+
+    lines = []
+    for i, q in enumerate(quiz["questions"], 1):
+        opts = f" Варианты: {' | '.join(q['options'])}." if q.get("options") else ""
+        lines.append(f"{i}. [{q['type']}] {q['prompt']}{opts}")
+    user = ("Задания:\n" + "\n".join(lines)
+            + '\nВерни JSON: {"answers": [{"id": 1, "answer": "..."}, ...]}')
+    llm = get_chat_model(get_settings(), schema=SOLVER_SCHEMA, temperature=0.0, max_tokens=600)
+    llm.seed = 0
+    try:
+        data = json.loads(llm.invoke([("system", SOLVER_SYSTEM), ("human", user)]).content)
+        by_id = {a["id"]: a["answer"] for a in data["answers"]}
+        return [by_id.get(i) for i in range(1, len(quiz["questions"]) + 1)]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("решатель не ответил: {}", e)
+        return None
+
+
+def solver_agrees(q: dict, given: str | None) -> bool | None:
+    """Совпал ли слепой ответ с ключом (перевод не сравнивается: у него много верных вариантов)."""
+    if given is None or q["type"] == "translation":
+        return None
+    keys = {normalize(v) for v in q["answer"].split(" / ")} | {normalize(q["answer"])}
+    return normalize(given) in keys
+
+
 def analyse_call(raw: str) -> dict:
     from pydantic import ValidationError
 
@@ -183,6 +222,7 @@ def run(args) -> None:
             row["calls"] = [{**{k: v for k, v in c.items() if k != "raw"}, **analyse_call(c["raw"]),
                              "raw": c["raw"][:3000]} for c in calls]
             row["verdicts"] = judge(row | {"topic": topic, "level": level}) if row["questions"] else None
+            row["solver"] = solve(row) if row["questions"] else None
             with out.open("a") as f:
                 f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
             done += 1
@@ -213,6 +253,8 @@ def summarize(path: Path, num_ctx: int) -> dict:
         return any(difflib.SequenceMatcher(None, a, b).ratio() > 0.85 for i, a in enumerate(keys) for b in keys[i + 1:])
 
     verdicts = [(q, v) for r in ready if r.get("verdicts") for q, v in zip(r["questions"], r["verdicts"]) if v]
+    solved = [solver_agrees(q, a) for r in ready if r.get("solver") for q, a in zip(r["questions"], r["solver"])]
+    solved = [x for x in solved if x is not None]
     same_request = sum(c1["request_hash"] == c2["request_hash"] for r in matrix
                        for c1, c2 in zip(r["calls"], r["calls"][1:]))
     pos = Counter("ABCD"[q["options"].index(q["answer"])] for q in mc if q["answer"] in q["options"])
@@ -237,6 +279,7 @@ def summarize(path: Path, num_ctx: int) -> dict:
         "judge_on_topic": share(sum(v["on_topic"] for _, v in verdicts), len(verdicts)),
         "judge_explanation": share(sum(v["explanation_correct"] for _, v in verdicts), len(verdicts)),
         "judge_all": share(sum(all(v[c] for c in CRITERIA) for _, v in verdicts), len(verdicts)),
+        "solver_agrees": share(sum(solved), len(solved)),
         "mc_positions": dict(sorted(pos.items())),
         "latency_mean": round(statistics.mean(secs), 1) if secs else None,
         "latency_p95": secs[min(len(secs) - 1, round(0.95 * (len(secs) - 1)))] if secs else None,
@@ -264,7 +307,8 @@ ROWS = [("Тест собран полностью (5 из 5)", "full_test"), ("
         ("Повтор того же запроса подряд", "same_request_twice"), ("Ключ верен (по коду)", "key_ok"),
         ("Судья: эталон верен", "judge_answer_correct"), ("Судья: правильный ответ один", "judge_single_correct"),
         ("Судья: по теме", "judge_on_topic"), ("Судья: объяснение верно", "judge_explanation"),
-        ("Судья: все 4 пункта", "judge_all"), ("Позиции ответа в выборе", "mc_positions"),
+        ("Судья: все 4 пункта", "judge_all"), ("Слепое решение совпало с ключом", "solver_agrees"),
+        ("Позиции ответа в выборе", "mc_positions"),
         ("Задержка: среднее, с", "latency_mean"), ("Задержка: p95, с", "latency_p95"),
         ("Макс. промпт / промпт+ответ, токенов", None)]
 
@@ -319,17 +363,43 @@ def calibrate() -> None:
           {c: f"{by_code[(c, False)]}/{by_code[(c, True)]}" for c in "WTEF"})
 
 
+def calibrate_solver() -> None:
+    """Слепое решение против ручной разметки: ловит ли расхождение с ключом вопросы с неверным ответом (W)."""
+    stats = Counter()
+    for arm in ("fragments", "scratch"):
+        labels = json.loads((ROOT / f"eval/results/quiz_ab_labels_{arm}.json").read_text())
+        for line in (ROOT / f"eval/results/quiz_ab_{arm}.jsonl").read_text().splitlines():
+            r = json.loads(line)
+            if not r["items"]:
+                continue
+            answers = solve({"questions": r["items"]}) or [None] * len(r["items"])
+            for label, q, a in zip(labels[r["id"]], r["items"], answers):
+                agree = solver_agrees(q, a)
+                if agree is None:
+                    continue
+                group = "W" if "W" in label else ("ok" if label == "ok" else "другой брак")
+                stats[(group, agree)] += 1
+            print(f"  {arm} {r['id']}: решено", flush=True)
+    print("\nСлепое решение против ручной разметки (перевод не учитывается):")
+    for group in ("W", "ok", "другой брак"):
+        dis, agr = stats[(group, False)], stats[(group, True)]
+        print(f"  {group:<12} расходится с ключом {dis} из {dis + agr}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="run")
     ap.add_argument("--matrix", choices=["small", "full"], default="small")
     ap.add_argument("--calibrate-judge", action="store_true")
+    ap.add_argument("--calibrate-solver", action="store_true")
     ap.add_argument("--table", nargs="*")
     args = ap.parse_args()
     if args.table:
         table(args.table)
     elif args.calibrate_judge:
         calibrate()
+    elif args.calibrate_solver:
+        calibrate_solver()
     else:
         run(args)
 
