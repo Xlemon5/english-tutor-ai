@@ -1,4 +1,4 @@
-.PHONY: install manifest ingest ingest-full test lint ask api web eval eval-fast up down
+.PHONY: install manifest ingest ingest-full test lint ask api web eval eval-fast eval-quiz up down
 
 install:        ## установить зависимости в .venv
 	uv sync
@@ -32,6 +32,9 @@ eval:           ## оценка RAG: поиск + ответы LLM
 
 eval-fast:      ## оценка RAG без LLM (только поиск и порог)
 	uv run python eval/run_eval.py --no-llm
+
+eval-quiz:      ## генерация тестов по всем темам из materials/topics.yaml (долго, нужна LLM)
+	uv run python eval/quiz_check.py
 
 up:             ## поднять проект в Docker (Ollama должна работать на хосте)
 	docker compose up --build
