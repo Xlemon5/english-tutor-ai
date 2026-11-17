@@ -30,9 +30,18 @@ def build_services(settings: Settings) -> Services:
     store = ChunkStore(settings)
     retriever = Retriever(store, get_embedder(settings), settings)
     # для JSON-сценариев температура 0 и запас по длине ответа
+    debug_dir = settings.debug_llm_dir if settings.debug_llm else None
+    # проверка работ и судья свободных ответов — детерминированно (T=0)
     structured = StructuredCaller(
-        lambda schema: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500),
-        debug_dir=settings.debug_llm_dir if settings.debug_llm else None)
+        lambda schema, **opts: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500, **opts),
+        debug_dir=debug_dir)
+    # генерация тестов — сэмплинг из конфига; seed задаёт агент на каждый раунд
+    quiz_structured = StructuredCaller(
+        lambda schema, **opts: get_chat_model(
+            settings, schema=schema, temperature=settings.quiz_temperature, top_p=settings.quiz_top_p,
+            top_k=settings.quiz_top_k, repeat_penalty=settings.quiz_repeat_penalty,
+            max_tokens=settings.quiz_max_tokens, **opts),
+        debug_dir=debug_dir)
     return Services(
         settings=settings, store=store, retriever=retriever,
         # если ответ перешёл на китайский, его дописывает модель с небольшой температурой:
@@ -40,7 +49,7 @@ def build_services(settings: Settings) -> Services:
         theory=TheoryAgent(retriever, get_chat_model(settings),
                            resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE)),
         review=ReviewAgent(retriever, structured),
-        quiz=QuizAgent(retriever, structured, use_fragments=settings.quiz_use_fragments),
+        quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured),
     )
 
 

@@ -47,8 +47,10 @@ def get_embedder(settings: Settings) -> Embedder:
 
 
 def get_chat_model(settings: Settings, *, schema: dict | None = None, temperature: float | None = None,
-                   max_tokens: int | None = None):
-    """Чат-модель LangChain. schema — JSON-схема ответа (structured output), если провайдер её умеет."""
+                   max_tokens: int | None = None, top_p: float | None = None, top_k: int | None = None,
+                   repeat_penalty: float | None = None, seed: int | None = None):
+    """Чат-модель LangChain. schema — JSON-схема ответа (structured output), если провайдер её умеет.
+    Параметры сэмплинга, равные None, не передаются: тогда действуют значения Ollama по умолчанию."""
     provider = settings.llm_provider.lower()
     temp = settings.llm_temperature if temperature is None else temperature
     limit = max_tokens or settings.llm_max_tokens
@@ -58,6 +60,7 @@ def get_chat_model(settings: Settings, *, schema: dict | None = None, temperatur
         return ChatOllama(
             model=settings.llm_model, base_url=settings.ollama_base_url, temperature=temp,
             num_ctx=settings.llm_num_ctx, num_predict=limit, keep_alive=settings.llm_keep_alive, format=schema,
+            top_p=top_p, top_k=top_k, repeat_penalty=repeat_penalty, seed=seed,
         )
     if provider == "openai":
         try:
@@ -65,7 +68,8 @@ def get_chat_model(settings: Settings, *, schema: dict | None = None, temperatur
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("Для LLM_PROVIDER=openai установите пакет langchain-openai") from e
         model = ChatOpenAI(model=settings.llm_model, base_url=settings.openai_base_url,
-                           api_key=settings.openai_api_key, temperature=temp, max_tokens=limit)
+                           api_key=settings.openai_api_key, temperature=temp, max_tokens=limit,
+                           top_p=top_p, seed=seed)  # top_k и repeat_penalty в OpenAI-совместимом API нет
         if schema:
             return model.bind(response_format={"type": "json_schema",
                                                "json_schema": {"name": "answer", "schema": schema}})

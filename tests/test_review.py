@@ -38,7 +38,7 @@ GOOD = {
 
 
 def caller(*responses: str) -> StructuredCaller:
-    return StructuredCaller(lambda schema: FakeListChatModel(responses=list(responses)), retries=2)
+    return StructuredCaller(lambda schema, **_: FakeListChatModel(responses=list(responses)), retries=2)
 
 
 @pytest.fixture

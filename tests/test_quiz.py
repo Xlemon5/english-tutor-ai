@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 
 import pytest
@@ -26,7 +27,7 @@ TOPIC = "present simple third person singular ending -s"
 def agent_with(retriever, *responses) -> QuizAgent:
     queue = [json.dumps(r) if not isinstance(r, str) else r for r in responses]
     llm = FakeListChatModel(responses=queue)  # один экземпляр: ответы выдаются по очереди между вызовами
-    return QuizAgent(retriever, StructuredCaller(lambda schema: llm, retries=1))
+    return QuizAgent(retriever, StructuredCaller(lambda schema, **_: llm, retries=1))
 
 
 @pytest.fixture
@@ -128,11 +129,11 @@ def test_chinese_in_question_or_judgement_is_rejected():
 def test_scratch_mode_keeps_fragments_out_of_prompt_but_links_theory(retriever):
     seen_prompts = []
     llm = FakeListChatModel(responses=[json.dumps({"questions": [MC, GAP]})])
-    caller = StructuredCaller(lambda schema: llm, retries=1)
+    caller = StructuredCaller(lambda schema, **_: llm, retries=1)
 
-    def spy(schema, system, user):
+    def spy(schema, system, user, **options):
         seen_prompts.append(system + user)
-        return caller(schema, system, user)
+        return caller(schema, system, user, **options)
 
     agent = QuizAgent(retriever, spy, use_fragments=False)
     quiz = agent.generate(TOPIC, "A1", 2, ["multiple_choice", "fill_gap"])
@@ -169,3 +170,21 @@ def test_content_checks_reject_typical_defects():
     assert LLMQuestion.model_validate({**GAP, "prompt": "It is ____ (дождь) today.", "answer": "rainy"})
     assert LLMQuestion.model_validate({**MC, "prompt": "It is a cat and ____ dog.", "options": ["a", "an", "the"],
                                        "answer": "a"})
+
+
+def test_regeneration_rounds_never_send_identical_requests(retriever):
+    # при T=0 одинаковый запрос давал одинаковый брак во всех раундах (Present Simple / A1)
+    chinese = {**MC, "explanation": "第三人称单数主语需要动词的第三人称单数形式。"}
+    llm = FakeListChatModel(responses=[json.dumps({"questions": [chinese]})] * 2 + [json.dumps({"questions": [MC]})])
+    requests = []
+
+    def make_llm(schema, **options):
+        requests.append(options)
+        return llm
+
+    agent = QuizAgent(retriever, StructuredCaller(make_llm, retries=0))
+    quiz = agent.generate(TOPIC, "A1", 1, ["multiple_choice"], seed=7)
+    assert [q.prompt for q in quiz.questions] == [MC["prompt"]]
+    assert [r["seed"] for r in requests] == [7, 8, 9]  # каждый раунд — свой seed
+    # раунды 2 и 3 получают одинаковую обратную связь, но запрос всё равно разный
+    assert all(a != b for a, b in itertools.pairwise(requests))

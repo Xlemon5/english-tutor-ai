@@ -33,7 +33,7 @@ def make_client(settings, embedder, store, tmp_path, *, theory="Окончани
     ingest(settings, embedder, store)
     retriever = Retriever(store, embedder, settings)
     llm = FakeListChatModel(responses=[json.dumps(r) for r in structured] or ["{}"])
-    caller = StructuredCaller(lambda schema: llm, retries=0)
+    caller = StructuredCaller(lambda schema, **_: llm, retries=0)
     services = Services(settings=settings, store=store, retriever=retriever,
                         theory=TheoryAgent(retriever, FakeListChatModel(responses=[theory])),
                         review=ReviewAgent(retriever, caller), quiz=QuizAgent(retriever, caller))

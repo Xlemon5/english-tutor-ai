@@ -58,8 +58,9 @@ class StructuredCaller:
         self.retries = retries
         self.debug_dir = debug_dir
 
-    def __call__(self, schema: type[T], system: str, user: str) -> T:
-        llm = self.make_llm(schema.model_json_schema())
+    def __call__(self, schema: type[T], system: str, user: str, **options) -> T:
+        """options — параметры этого вызова для фабрики модели, например seed."""
+        llm = self.make_llm(schema.model_json_schema(), **options)
         messages = [SystemMessage(system), HumanMessage(user)]
         last_error = ""
         for attempt in range(self.retries + 1):

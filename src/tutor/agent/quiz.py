@@ -1,6 +1,7 @@
 """Сценарий «тест»: генерация по материалам, проверка ответов студента и разбор."""
 from __future__ import annotations
 
+import random
 import re
 import uuid
 from typing import Literal
@@ -176,15 +177,21 @@ def plan_types(n: int, types: list[str]) -> list[str]:
 
 
 class QuizAgent:
-    def __init__(self, retriever: Retriever, structured: StructuredCaller, use_fragments: bool = True) -> None:
-        """use_fragments=False — модель составляет предложения сама, без фрагментов в промпте;
+    def __init__(self, retriever: Retriever, structured: StructuredCaller, use_fragments: bool = True,
+                 judge: StructuredCaller | None = None) -> None:
+        """structured — генерация вопросов (с сэмплингом), judge — оценка свободных ответов студента
+        (по умолчанию тот же вызывающий; в приложении — детерминированный).
+        use_fragments=False — модель составляет предложения сама, без фрагментов в промпте;
         поиск всё равно проверяет, что тема есть в материалах, и даёт ссылку на теорию."""
         self.retriever = retriever
         self.structured = structured
+        self.judge = judge or structured
         self.use_fragments = use_fragments
 
     def generate(self, topic: str, level: str = "A2", n: int = 5, types: list[str] | None = None,
-                 allow_without_materials: bool = False) -> Quiz:
+                 allow_without_materials: bool = False, seed: int | None = None) -> Quiz:
+        """seed — база для seed раундов (в eval фиксированная, в приложении случайная). У каждого раунда свой
+        seed, поэтому повторный раунд никогда не отправляет модели побайтно тот же запрос."""
         topic = topic.strip()
         types = [t for t in (types or list(TYPE_RU)) if t in TYPE_RU] or list(TYPE_RU)
         n = max(1, min(n, MAX_QUESTIONS))
@@ -212,7 +219,9 @@ class QuizAgent:
         seen: set[str] = set()
         rejected: list[str] = []  # причины отказа — подсказка модели в следующем раунде
         wanted = plan_types(n, types)
-        for _ in range(MAX_ROUNDS):
+        base_seed = seed if seed is not None else random.randrange(1, 2**31 - MAX_ROUNDS)
+        logger.info("генерация теста «{}» ({}): seed {}", topic, level, base_seed)
+        for round_no in range(MAX_ROUNDS):
             missing = list(wanted)
             for q in accepted:  # чего не хватает — считаем по типам, а не по позициям
                 missing.remove(q.type)
@@ -230,7 +239,7 @@ class QuizAgent:
             user = user_template.format(
                 topic=topic, level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid, context=context)
             try:
-                raw = self.structured(LLMQuiz, system, user)
+                raw = self.structured(LLMQuiz, system, user, seed=base_seed + round_no)
             except StructuredOutputError as e:
                 logger.warning("генерация теста: {}", e)
                 continue
@@ -285,7 +294,7 @@ class QuizAgent:
                 # свободный ответ может быть верным, даже если не совпал с эталоном
                 user = f"Задание: {q.prompt}\nЭталон: {q.answer}\nОтвет студента: {given}\nОтвет:"
                 try:
-                    verdict = self.structured(Judgement, load_prompt("judge_system"), user)
+                    verdict = self.judge(Judgement, load_prompt("judge_system"), user)
                     correct, comment = verdict.correct, verdict.comment
                 except StructuredOutputError:
                     comment = "Автоматическая проверка не удалась, ответ сравнён с эталоном."

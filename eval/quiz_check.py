@@ -56,9 +56,9 @@ def main() -> None:
     calls = Counter()
     inner = agent.structured
 
-    def counted(schema, system, user):
+    def counted(schema, system, user, **options):
         calls["llm"] += 1
-        return inner(schema, system, user)
+        return inner(schema, system, user, **options)
 
     agent.structured = counted
     rejects: Counter = Counter()

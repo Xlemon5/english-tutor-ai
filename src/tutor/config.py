@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     llm_num_ctx: int = 4096
     llm_max_tokens: int = 700
     llm_keep_alive: str = "30m"
+    # генерация тестов: сэмплинг вместо жадного выбора. При T=0 Qwen на части тем стабильно пишет объяснения
+    # по-китайски и в каждом раунде повторяет тот же брак (воспроизведено на Present Simple / A1).
+    # Отправная точка — рекомендованные параметры Qwen2.5.
+    quiz_temperature: float = 0.7
+    quiz_top_p: float = 0.8
+    quiz_top_k: int = 20
+    quiz_repeat_penalty: float = 1.05
+    quiz_max_tokens: int = 1500  # предохранитель: обычный ответ на 4 вопроса — 250–450 токенов
     # отладка: каждый вызов LLM в JSON-сценариях (запрос, сырой ответ, токены) пишется в debug_llm_dir
     debug_llm: bool = False
     debug_llm_dir: Path = Path("data/llm_debug")
