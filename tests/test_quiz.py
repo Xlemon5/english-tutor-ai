@@ -146,3 +146,26 @@ def test_instruction_example_is_not_accepted_as_question(retriever):
     quiz = agent_with(retriever, {"questions": [example]}, {"questions": [MC]}).generate(
         TOPIC, "A1", 1, ["multiple_choice"])
     assert [q.prompt for q in quiz.questions] == ["She ____ in a shop."]
+
+
+def test_content_checks_reject_typical_defects():
+    # дефекты из ручной разметки 120 вопросов Qwen 7B
+    cases = {
+        "задание по-русски": {**MC, "prompt": "Она ____ в магазине.", "options": ["работает", "работать", "работал"],
+                              "answer": "работает"},
+        "перевод с русским ответом": {**TR, "answer": "Она работает в shop."},
+        "объяснение не по-русски": {**MC, "explanation": "Third person singular takes -s."},
+        "пропуск без подсказки": {**GAP, "prompt": "He ____ TV every evening."},
+        "ответ уже в задании": {**GAP, "prompt": "She was born in 2010. She ____ (be born) in 2010.",
+                                "answer": "was born"},
+        "слово повторяется у пропуска": {**MC, "prompt": "If it rains, I ____ stay at home.",
+                                         "options": ["will stay", "stay", "stays"], "answer": "will stay"},
+    }
+    for name, broken in cases.items():
+        with pytest.raises(ValidationError):
+            LLMQuestion.model_validate(broken)
+            pytest.fail(name)
+    # русская подсказка в скобках и короткий ответ, который встречается в предложении, допустимы
+    assert LLMQuestion.model_validate({**GAP, "prompt": "It is ____ (дождь) today.", "answer": "rainy"})
+    assert LLMQuestion.model_validate({**MC, "prompt": "It is a cat and ____ dog.", "options": ["a", "an", "the"],
+                                       "answer": "a"})

@@ -62,7 +62,38 @@ class LLMQuestion(BaseModel):
             raise ValueError("error_correction: исправленное предложение совпадает с исходным")
         if self.type == "translation" and not re.search(r"[а-яё]", self.prompt, re.IGNORECASE):
             raise ValueError("translation: задание должно быть на русском")
+        check_content(self)
         return self
+
+
+_CYRILLIC = re.compile(r"[а-яё]", re.IGNORECASE)
+
+
+def outside_brackets(text: str) -> str:
+    return re.sub(r"\([^)]*\)", " ", text)
+
+
+def check_content(q: LLMQuestion) -> None:
+    """Дефекты, которые Qwen 7B допускает чаще всего и которые видны без модели (по разбору тестов на 16 темах)."""
+    if q.type == "translation":
+        if _CYRILLIC.search(q.answer):
+            raise ValueError("translation: ответ — перевод на английский, без русских слов")
+    elif any(_CYRILLIC.search(t) for t in (outside_brackets(q.prompt), q.answer, *q.options)):
+        # подсказка в скобках может быть русской: (дождь)
+        raise ValueError(f"{q.type}: задание и ответ на английском, по-русски только перевод и объяснение")
+    if not _CYRILLIC.search(q.explanation):
+        raise ValueError("explanation: объяснение пиши по-русски")
+    if q.type == "fill_gap" and not re.search(r"\([^)]+\)", q.prompt):
+        raise ValueError("fill_gap: после пропуска нужна подсказка в скобках, например (go)")
+    if q.type in ("multiple_choice", "fill_gap"):
+        before, _, after = outside_brackets(q.prompt).partition("____")
+        if len(q.answer) >= 4 and re.search(r"(?<!\w)" + re.escape(q.answer) + r"(?!\w)", before + " " + after, re.IGNORECASE):
+            raise ValueError("ответ уже написан в задании — в нём должен остаться только пропуск ____")
+        words = q.answer.split()
+        prev, nxt = before.split()[-1:], after.split()[:1]
+        if words and ((prev and prev[0].lower() == words[0].lower())
+                      or (nxt and nxt[0].strip(".,!?").lower() == words[-1].strip(".,!?").lower())):
+            raise ValueError("после подстановки ответа слово повторяется дважды — пропуск стоит не там")
 
 
 class LLMQuiz(BaseModel):
