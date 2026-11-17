@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     # Вес лексической выдачи (BM25) при объединении рангов; семантическая выдача имеет вес 1
     lexical_weight: float = 0.5
     relevance_threshold: float = 0.55
+    # тесты: True — фрагменты материалов идут в промпт, False — модель составляет предложения сама
+    quiz_use_fragments: bool = True
 
     # Авторизация: при AUTH_ENABLED=false все запросы идут от пользователя «local»
     auth_enabled: bool = True

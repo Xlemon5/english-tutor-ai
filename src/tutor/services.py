@@ -39,7 +39,7 @@ def build_services(settings: Settings) -> Services:
         theory=TheoryAgent(retriever, get_chat_model(settings),
                            resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE)),
         review=ReviewAgent(retriever, structured),
-        quiz=QuizAgent(retriever, structured),
+        quiz=QuizAgent(retriever, structured, use_fragments=settings.quiz_use_fragments),
     )
 
 

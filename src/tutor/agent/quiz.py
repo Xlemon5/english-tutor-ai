@@ -135,14 +135,22 @@ def question_key(prompt: str) -> str:
     return normalize(re.sub(r"\([^)]*\)", " ", prompt))
 
 
+def example_keys(system: str) -> set[str]:
+    """Ключи заданий из примера в инструкции: маленькая модель иногда переносит их в тест на другую тему."""
+    return {question_key(p) for p in re.findall(r'"prompt": "([^"]+)"', system)}
+
+
 def plan_types(n: int, types: list[str]) -> list[str]:
     return [types[i % len(types)] for i in range(n)]
 
 
 class QuizAgent:
-    def __init__(self, retriever: Retriever, structured: StructuredCaller) -> None:
+    def __init__(self, retriever: Retriever, structured: StructuredCaller, use_fragments: bool = True) -> None:
+        """use_fragments=False — модель составляет предложения сама, без фрагментов в промпте;
+        поиск всё равно проверяет, что тема есть в материалах, и даёт ссылку на теорию."""
         self.retriever = retriever
         self.structured = structured
+        self.use_fragments = use_fragments
 
     def generate(self, topic: str, level: str = "A2", n: int = 5, types: list[str] | None = None,
                  allow_without_materials: bool = False) -> Quiz:
@@ -162,7 +170,11 @@ class QuizAgent:
                 message=f"{NO_MATERIAL_TEXT} По теме «{topic}» материалов нет. Сгенерировать тест без опоры на материалы?",
                 suggestions=suggest_topics(search, threshold=self.retriever.settings.relevance_threshold),
             )
-        context = format_context(citations) if citations else "(фрагментов нет — составь вопросы по теме сам)"
+        grounded_prompt = self.use_fragments and bool(citations)
+        system = load_prompt("quiz_system" if grounded_prompt else "quiz_scratch_system")
+        user_template = load_prompt("quiz_user" if grounded_prompt else "quiz_scratch_user")
+        context = format_context(citations) if grounded_prompt else ""
+        examples = example_keys(system)
         vocab = load_vocab(str(self.retriever.settings.materials_dir))
 
         accepted: list[LLMQuestion] = []
@@ -184,10 +196,10 @@ class QuizAgent:
                 avoid += ("Прошлые задания отклонены, исправь ошибки:\n"
                           + "\n".join(f"- {r}" for r in dict.fromkeys(rejected)) + "\n")
                 rejected.clear()
-            user = load_prompt("quiz_user").format(
+            user = user_template.format(
                 topic=topic, level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid, context=context)
             try:
-                raw = self.structured(LLMQuiz, load_prompt("quiz_system"), user)
+                raw = self.structured(LLMQuiz, system, user)
             except StructuredOutputError as e:
                 logger.warning("генерация теста: {}", e)
                 continue
@@ -203,6 +215,10 @@ class QuizAgent:
                 if q.type not in pending:
                     continue  # вопрос сверх плана — не ошибка модели
                 key = question_key(q.prompt)
+                if key in examples:
+                    logger.info("вопрос отброшен (пример из инструкции): {}", q.prompt)
+                    rejected.append(f"это пример из инструкции, а не задание по теме «{topic}»: {q.prompt}")
+                    continue
                 if key in seen:
                     logger.info("вопрос отброшен (повтор): {}", q.prompt)
                     rejected.append(f"задание повторяет уже составленное: {q.prompt}")

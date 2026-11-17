@@ -12,13 +12,13 @@ from tutor.lexicon import words_above_level
 from tutor.llm.structured import StructuredCaller
 from tutor.retrieval.hybrid import Retriever
 
-MC = {"type": "multiple_choice", "prompt": "She ____ in a bank.", "options": ["work", "works", "working"],
+MC = {"type": "multiple_choice", "prompt": "She ____ in a shop.", "options": ["work", "works", "working"],
       "answer": "works", "explanation": "После she нужен глагол с -s.", "fragment": 1}
 GAP = {"type": "fill_gap", "prompt": "He ____ (watch) TV every evening.", "options": [], "answer": "watches",
        "explanation": "После -ch добавляется -es.", "fragment": 1}
-FIX = {"type": "error_correction", "prompt": "He go to school every day.", "options": [],
-       "answer": "He goes to school every day.", "explanation": "После he нужна форма goes.", "fragment": 7}
-TR = {"type": "translation", "prompt": "Она работает в банке.", "options": [], "answer": "She works in a bank.",
+FIX = {"type": "error_correction", "prompt": "He go to school every morning.", "options": [],
+       "answer": "He goes to school every morning.", "explanation": "После he нужна форма goes.", "fragment": 7}
+TR = {"type": "translation", "prompt": "Она работает в магазине.", "options": [], "answer": "She works in a shop.",
       "explanation": "Регулярное действие — Present Simple.", "fragment": 1}
 TOPIC = "present simple third person singular ending -s"
 
@@ -65,7 +65,7 @@ def test_invalid_questions_are_dropped_and_regenerated(retriever):
 
 
 def test_question_schema_validation():
-    for broken in ({**MC, "options": ["works", "works", "work"]}, {**FIX, "answer": "He go to school every day"},
+    for broken in ({**MC, "options": ["works", "works", "work"]}, {**FIX, "answer": "He go to school every morning"},
                    {**TR, "prompt": "She works in a bank."}, {**MC, "type": "essay"}):
         with pytest.raises(ValidationError):
             LLMQuestion.model_validate(broken)
@@ -80,14 +80,14 @@ def test_answer_copied_into_choice_prompt_becomes_gap():
     with pytest.raises(ValidationError):  # у заполнения пропуска так нельзя — пропала бы подсказка в скобках
         LLMQuestion.model_validate({**GAP, "prompt": "He watches TV."})
     with pytest.raises(ValidationError):  # ответа в предложении нет — чинить нечего
-        LLMQuestion.model_validate({**MC, "prompt": "She is in a bank."})
+        LLMQuestion.model_validate({**MC, "prompt": "She is in a shop."})
 
 
 def test_check_scores_and_uses_judge_for_free_answers(retriever):
     agent = agent_with(retriever, {"questions": [MC, GAP, FIX, TR]},
                        {"correct": True, "comment": "Предлог at тоже подходит."})
     quiz = agent.generate(TOPIC, "A1", 4)
-    result = agent.check(quiz, {1: "Works", 2: "watch", 3: "he goes to school every day", 4: "She works at a bank"})
+    result = agent.check(quiz, {1: "Works", 2: "watch", 3: "he goes to school every morning", 4: "She works at a shop"})
     assert [r.correct for r in result.results] == [True, False, True, True]
     assert (result.score, result.total) == (3, 4)
     assert result.results[3].comment == "Предлог at тоже подходит."
@@ -106,7 +106,7 @@ def test_text_answers_ignore_case_punctuation_and_contractions(retriever):
     agent = agent_with(retriever, {"questions": [MC, GAP, FIX, TR]})
     quiz = agent.generate(TOPIC, "A1", 4)
     # judge не вызывается: все ответы совпадают с эталоном после нормализации
-    result = agent.check(quiz, {1: "WORKS", 2: "  Watches ", 3: "HE GOES TO SCHOOL EVERY DAY", 4: "she works in a bank!"})
+    result = agent.check(quiz, {1: "WORKS", 2: "  Watches ", 3: "HE GOES TO SCHOOL EVERY MORNING", 4: "she works in a shop!"})
     assert [r.correct for r in result.results] == [True, True, True, True]
     assert normalize("He DOESN'T like it.") == normalize("he does not like it")
     assert normalize("I'm here, it’s OK") == normalize("I am here it is ok")
@@ -124,3 +124,25 @@ def test_chinese_in_question_or_judgement_is_rejected():
     assert not has_foreign_script(["Он сказал: «It's — fine…» № 5, 50 °C", {"a": "café"}])
     assert has_foreign_script({"x": ["ひらがな"]}) and has_foreign_script("한국어")
 
+
+def test_scratch_mode_keeps_fragments_out_of_prompt_but_links_theory(retriever):
+    seen_prompts = []
+    llm = FakeListChatModel(responses=[json.dumps({"questions": [MC, GAP]})])
+    caller = StructuredCaller(lambda schema: llm, retries=1)
+
+    def spy(schema, system, user):
+        seen_prompts.append(system + user)
+        return caller(schema, system, user)
+
+    agent = QuizAgent(retriever, spy, use_fragments=False)
+    quiz = agent.generate(TOPIC, "A1", 2, ["multiple_choice", "fill_gap"])
+    assert quiz.status == "ready" and quiz.grounded  # тема найдена в материалах
+    assert "Фрагменты:" not in seen_prompts[0] and "[1]" not in seen_prompts[0]  # нумерованных фрагментов нет
+    assert all(q.citation and q.citation.file == "web/book/present-simple.md" for q in quiz.questions)
+
+
+def test_instruction_example_is_not_accepted_as_question(retriever):
+    example = {**MC, "prompt": "She ____ in a bank."}  # слово в слово пример из quiz_system.md
+    quiz = agent_with(retriever, {"questions": [example]}, {"questions": [MC]}).generate(
+        TOPIC, "A1", 1, ["multiple_choice"])
+    assert [q.prompt for q in quiz.questions] == ["She ____ in a shop."]

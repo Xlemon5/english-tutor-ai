@@ -22,7 +22,7 @@ REVIEW = {
                 "explanation": "Нужен -s.", "rule": "third person singular ending -s"}],
     "summary": "Хороший текст, одна ошибка.", "cefr_level": "A1", "review_topics": ["Present Simple"],
 }
-QUIZ = {"questions": [{"type": "multiple_choice", "prompt": "She ____ in a bank.",
+QUIZ = {"questions": [{"type": "multiple_choice", "prompt": "She ____ in a shop.",
                        "options": ["work", "works", "working"], "answer": "works",
                        "explanation": "После she нужен -s.", "fragment": 1}]}
 TOPIC = "present simple third person singular ending -s"
