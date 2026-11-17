@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     llm_num_ctx: int = 4096
     llm_max_tokens: int = 700
     llm_keep_alive: str = "30m"
+    # отладка: каждый вызов LLM в JSON-сценариях (запрос, сырой ответ, токены) пишется в debug_llm_dir
+    debug_llm: bool = False
+    debug_llm_dir: Path = Path("data/llm_debug")
 
     embeddings_provider: str = "ollama"
     embeddings_model: str = "bge-m3"

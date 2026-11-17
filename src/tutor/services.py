@@ -31,7 +31,8 @@ def build_services(settings: Settings) -> Services:
     retriever = Retriever(store, get_embedder(settings), settings)
     # для JSON-сценариев температура 0 и запас по длине ответа
     structured = StructuredCaller(
-        lambda schema: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500))
+        lambda schema: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500),
+        debug_dir=settings.debug_llm_dir if settings.debug_llm else None)
     return Services(
         settings=settings, store=store, retriever=retriever,
         # если ответ перешёл на китайский, его дописывает модель с небольшой температурой:
