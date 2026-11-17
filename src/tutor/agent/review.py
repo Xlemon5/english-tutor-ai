@@ -5,8 +5,9 @@ import re
 from difflib import SequenceMatcher
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
 from tutor.llm.structured import StructuredCaller
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
@@ -34,6 +35,12 @@ class LLMReview(BaseModel):
     summary: str = Field(min_length=5, max_length=600)
     cefr_level: Literal["A1", "A2", "B1", "B2"]
     review_topics: list[str] = Field(max_length=3)
+
+    @model_validator(mode="after")
+    def check_language(self) -> LLMReview:
+        if has_foreign_script(self.model_dump()):  # ошибка уйдёт модели, и она перепишет ответ
+            raise ValueError(FOREIGN_SCRIPT_ERROR)
+        return self
 
 
 class ReviewedError(LLMError):

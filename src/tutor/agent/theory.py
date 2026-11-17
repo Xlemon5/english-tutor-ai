@@ -7,8 +7,10 @@ from typing import Literal
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from loguru import logger
 from pydantic import BaseModel, Field
 
+from tutor.llm.language import FOREIGN_SCRIPT, LANGUAGE_RULE
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
 from tutor.retrieval.hybrid import Retriever, SearchResult
@@ -17,6 +19,7 @@ NO_MATERIAL_TEXT = "В материалах этого нет."
 NO_ANSWER = "NO_ANSWER"
 _MARK = re.compile(r"\[(\d+)\]")
 FRAGMENT_CHARS = 1000
+MAX_RESUMES = 2  # сколько раз продолжать ответ после перехода модели на китайский
 
 
 class TheoryAnswer(BaseModel):
@@ -78,11 +81,53 @@ def suggest_topics(result: SearchResult, limit: int = 3, threshold: float = 0.0)
 
 
 class TheoryAgent:
-    def __init__(self, retriever: Retriever, llm) -> None:
+    def __init__(self, retriever: Retriever, llm, resume_llm=None) -> None:
+        """resume_llm — модель, которая дописывает ответ, если основная перешла на китайский
+        (по умолчанию та же; в сервисах — с небольшой температурой, чтобы не повторить тот же сбой)."""
         self.retriever = retriever
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", "{system}"), ("human", load_prompt("theory_user"))])
-        self.chain = prompt | llm | StrOutputParser()
+        messages = [("system", "{system}"), ("human", load_prompt("theory_user"))]
+        self.chain = ChatPromptTemplate.from_messages(messages) | llm | StrOutputParser()
+        # последнее сообщение — начало ответа ассистента: модель продолжает его, а не начинает заново
+        self.resume_chain = (ChatPromptTemplate.from_messages([*messages, ("ai", "{prefix}")])
+                             | (resume_llm or llm) | StrOutputParser())
+
+    def _pieces(self, inputs: dict) -> Iterator[str]:
+        """Текст ответа модели по кускам, без иероглифов. Если модель перешла на китайский, генерация
+        обрывается и продолжается с последнего чистого места с явным запретом (до MAX_RESUMES раз);
+        не получилось — ответ заканчивается на этом месте."""
+        text = ""
+        for attempt in range(MAX_RESUMES + 1):
+            if attempt == 0:
+                source = self.chain.stream(inputs)
+            else:
+                source = self.resume_chain.stream(
+                    {**inputs, "system": inputs["system"] + "\n" + LANGUAGE_RULE, "prefix": text.rstrip()})
+            dangling = text[len(text.rstrip()):]  # пробел в конце уже показан — второй не нужен
+            tail = ""  # недописанное слово держим, пока не ясно, что за ним не иероглифы
+            switched = None
+            for piece in source:
+                if dangling and piece:
+                    piece, dangling = piece.lstrip(" "), ""
+                tail += piece
+                if m := FOREIGN_SCRIPT.search(tail):
+                    switched = tail[:m.start()]
+                    break
+                cut = max(tail.rfind(" "), tail.rfind("\n")) + 1
+                if cut:
+                    text += tail[:cut]
+                    yield tail[:cut]
+                    tail = tail[cut:]
+            if switched is None:
+                if tail:
+                    yield tail
+                return
+            source.close()  # обрываем генерацию: дальше модель продолжила бы по-китайски
+            logger.warning("ответ перешёл на китайский после «{}» (сбой {} из {})",
+                           (text + switched)[-60:], attempt + 1, MAX_RESUMES + 1)
+            if switched:
+                text += switched
+                yield switched
+        logger.warning("модель не вернулась к русскому — ответ закончен на последнем чистом месте")
 
     def _refuse(self, result: SearchResult, with_suggestions: bool) -> TheoryAnswer:
         return TheoryAnswer(
@@ -98,8 +143,7 @@ class TheoryAgent:
             return
         citations = build_citations(result.hits)
         context = format_context(citations, self.retriever.settings.context_fragment_chars)
-        stream = self.chain.stream({
-            "system": load_prompt("theory_system"), "context": context, "question": question})
+        stream = self._pieces({"system": load_prompt("theory_system"), "context": context, "question": question})
         text, emitted = "", 0
         hold = len(NO_ANSWER) + 2  # не показываем начало ответа, пока не ясно, что это не отказ
         for piece in stream:

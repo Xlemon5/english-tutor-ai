@@ -112,3 +112,15 @@ def test_text_answers_ignore_case_punctuation_and_contractions(retriever):
     assert normalize("I'm here, it’s OK") == normalize("I am here it is ok")
     assert normalize("They can't swim") == normalize("they cannot swim")
 
+
+def test_chinese_in_question_or_judgement_is_rejected():
+    from tutor.agent.quiz import Judgement
+    from tutor.llm.language import has_foreign_script
+
+    with pytest.raises(ValidationError):
+        LLMQuestion.model_validate({**MC, "explanation": "После she нужен 第三人称 глагол."})
+    with pytest.raises(ValidationError):
+        Judgement.model_validate({"correct": True, "comment": "Верно，"})  # полноширинная запятая
+    assert not has_foreign_script(["Он сказал: «It's — fine…» № 5, 50 °C", {"a": "café"}])
+    assert has_foreign_script({"x": ["ひらがな"]}) and has_foreign_script("한국어")
+

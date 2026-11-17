@@ -13,6 +13,8 @@ from tutor.llm.structured import StructuredCaller
 from tutor.retrieval.hybrid import Retriever
 from tutor.retrieval.store import ChunkStore
 
+RESUME_TEMPERATURE = 0.3
+
 
 @dataclass
 class Services:
@@ -32,7 +34,10 @@ def build_services(settings: Settings) -> Services:
         lambda schema: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500))
     return Services(
         settings=settings, store=store, retriever=retriever,
-        theory=TheoryAgent(retriever, get_chat_model(settings)),
+        # если ответ перешёл на китайский, его дописывает модель с небольшой температурой:
+        # при температуре 0 она на том же месте снова выбрала бы тот же иероглиф
+        theory=TheoryAgent(retriever, get_chat_model(settings),
+                           resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE)),
         review=ReviewAgent(retriever, structured),
         quiz=QuizAgent(retriever, structured),
     )

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from tutor.agent.theory import NO_MATERIAL_TEXT, format_context, suggest_topics
 from tutor.lexicon import load_vocab, words_above_level
+from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
 from tutor.llm.structured import StructuredCaller, StructuredOutputError
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
@@ -34,6 +35,8 @@ class LLMQuestion(BaseModel):
 
     @model_validator(mode="after")
     def check_format(self) -> LLMQuestion:
+        if has_foreign_script([self.prompt, self.options, self.answer, self.explanation]):
+            raise ValueError(FOREIGN_SCRIPT_ERROR)
         self.prompt = re.sub(r"_{3,}", "____", self.prompt).strip()
         self.prompt = re.sub(r"\*\*(.+?)\*\*", r"\1", self.prompt)  # выделение из фрагментов Википедии
         self.options = [o.strip() for o in self.options if o.strip()]
@@ -86,6 +89,12 @@ class Quiz(BaseModel):
 class Judgement(BaseModel):
     correct: bool
     comment: str = Field(max_length=300)
+
+    @model_validator(mode="after")
+    def check_language(self) -> Judgement:
+        if has_foreign_script(self.comment):
+            raise ValueError(FOREIGN_SCRIPT_ERROR)
+        return self
 
 
 class QuestionResult(BaseModel):

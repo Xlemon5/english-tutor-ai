@@ -69,3 +69,19 @@ def test_clean_markers():
     text, used = clean_markers("Факт [2] , другой [5]. И ещё [1][2].", {1, 2})
     assert text == "Факт [2], другой. И ещё [1][2]."
     assert used == [2, 1]
+
+
+def test_switch_to_chinese_is_cut_and_answer_continued(retriever):
+    # Qwen иногда переходит на китайский посреди ответа; продолжение берётся из второго ответа модели
+    llm = FakeListChatModel(responses=["Окончание -s добавляется 形成的句子应该是 после he [1].",
+                                       " в третьем лице: *he works* [1]."])
+    events = list(TheoryAgent(retriever, llm).stream("third person singular ending -s or -es"))
+    shown = "".join(e.text for e in events if e.type == "token")
+    assert shown == "Окончание -s добавляется в третьем лице: *he works* [1]."
+    assert events[-1].result.answer == shown and events[-1].result.status == "answered"
+
+
+def test_answer_stops_at_last_clean_place_if_model_never_recovers(retriever):
+    llm = FakeListChatModel(responses=["Окончание -s добав形成", "形成的", "继续"])
+    result = TheoryAgent(retriever, llm).answer("third person singular ending -s or -es")
+    assert result.answer == "Окончание -s добав" and result.status == "answered"

@@ -110,3 +110,9 @@ def test_whole_sentence_fragment_is_split_into_word_level_errors():
     assert [(e.fragment, e.correction) for e, _ in parts] == [("a popcorn", "popcorn"), ("drinked", "drank")]
     short = split_error(text, err("drinked", "drank"))
     assert len(short) == 1 and short[0][0].fragment == "drinked"
+
+
+def test_chinese_in_review_is_rejected_and_retried(retriever):
+    chinese = json.dumps({**GOOD, "summary": "Текст понятный, но 动词形式有错误."})
+    result = ReviewAgent(retriever, caller(chinese, json.dumps(GOOD))).review(TEXT)
+    assert result.summary == GOOD["summary"]
