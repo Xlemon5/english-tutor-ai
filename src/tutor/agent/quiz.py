@@ -386,7 +386,7 @@ class QuizAgent:
             variants = {normalize(v) for v in q.answer.split(" / ")} | {normalize(q.answer)}
             correct = bool(given) and normalize(given) in variants
             comment = ""
-            if given and not correct and q.type in ("error_correction", "translation"):
+            if given and not correct and q.type in ("fill_gap", "error_correction", "translation"):
                 # свободный ответ может быть верным, даже если не совпал с эталоном
                 user = f"Задание: {q.prompt}\nЭталон: {q.answer}\nОтвет студента: {given}\nОтвет:"
                 try:

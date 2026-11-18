@@ -86,12 +86,14 @@ def test_answer_copied_into_choice_prompt_becomes_gap():
 
 def test_check_scores_and_uses_judge_for_free_answers(retriever):
     agent = agent_with(retriever, {"questions": [MC, GAP, FIX, TR]},
+                       {"correct": False, "comment": "После he нужна форма watches."},  # пропуск: судья не засчитал
                        {"correct": True, "comment": "Предлог at тоже подходит."})
     quiz = agent.generate(TOPIC, "A1", 4)
     result = agent.check(quiz, {1: "Works", 2: "watch", 3: "he goes to school every morning", 4: "She works at a shop"})
     assert [r.correct for r in result.results] == [True, False, True, True]
     assert (result.score, result.total) == (3, 4)
     assert result.results[3].comment == "Предлог at тоже подходит."
+    assert result.results[1].comment == "После he нужна форма watches."  # пропуск тоже оценивает судья
     assert result.results[1].question.answer == "watches" and result.results[1].question.citation is not None
 
 
