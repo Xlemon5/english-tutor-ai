@@ -7,6 +7,7 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from pydantic import ValidationError
 
 from tutor.agent.review import (
+    ERROR_TYPE_RU,
     NOT_IN_MATERIALS,
     LLMError,
     LLMReview,
@@ -118,32 +119,25 @@ def test_chinese_in_review_is_rejected_and_retried(retriever):
     assert result.summary == GOOD["summary"]
 
 
-def test_review_generation_schema_forbids_cjk():
+
+def test_review_schema_comes_from_the_model_with_allowed_characters():
     import re
 
     from tutor.llm.language import TEXT_PATTERN
 
-    schema = LLMReview.llm_schema()
-    error = schema["properties"]["errors"]["items"]["properties"]
-    assert error["explanation"]["pattern"] == TEXT_PATTERN == schema["properties"]["summary"]["pattern"]
+    schema = LLMReview.model_json_schema()  # именно она уходит в Ollama: ручной копии больше нет
+    error = schema["$defs"]["LLMError"]["properties"]
+    assert set(schema["$defs"]["LLMError"]["required"]) == set(LLMError.model_fields)
+    for field in (error["explanation"], error["rule"], schema["properties"]["summary"],
+                  schema["properties"]["review_topics"]["items"]):
+        assert field["pattern"] == TEXT_PATTERN
+    assert "pattern" not in error["fragment"] and "pattern" not in error["correction"]  # цитаты ученика
+    assert error["rule"]["maxLength"] == 80 and error["type"]["enum"] == list(ERROR_TYPE_RU)
     assert not re.fullmatch(TEXT_PATTERN, "Для第三人称单数需要使用 goes")
-    assert re.fullmatch(TEXT_PATTERN, "После she нужен глагол с -s: goes.")
-    assert "pattern" not in error["fragment"] and "pattern" not in error["correction"]  # цитаты ученика — как есть
 
 
-def test_generation_schemas_define_every_required_field():
-    # поле type однажды пропало из схемы проверки работ, и модель перестала его выдавать
-    from tutor.agent.quiz import QUIZ_LLM_SCHEMA
-
-    def walk(node):
-        if isinstance(node, dict):
-            if "required" in node:
-                assert set(node["required"]) <= set(node.get("properties", {})), node["required"]
-            for value in node.values():
-                walk(value)
-        elif isinstance(node, list):
-            for value in node:
-                walk(value)
-
-    walk(LLMReview.llm_schema())
-    walk(QUIZ_LLM_SCHEMA)
+def test_cjk_in_student_quote_does_not_break_review():
+    quoted = {**GOOD, "errors": [{**GOOD["errors"][0], "fragment": "apples，bananas"}]}  # полноширинная запятая
+    assert LLMReview.model_validate(quoted)
+    with pytest.raises(ValidationError):  # а в тексте модели — по-прежнему сбой
+        LLMReview.model_validate({**GOOD, "summary": "Текст понятный, 动词形式有错误."})

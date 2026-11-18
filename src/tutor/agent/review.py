@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,41 +22,33 @@ ERROR_TYPE_RU = {"grammar": "грамматика", "vocabulary": "лексик�
                  "punctuation": "пунктуация", "style": "стиль"}
 
 
+# Текст, который пишет сама модель, ограничен разрешёнными символами: шаблон уходит в JSON-схему, и Ollama
+# превращает его в грамматику (при T=0 на текстах A1 объяснения шли по-китайски в 7 вызовах из 8).
+# Цитаты из текста ученика (fragment, correction) не ограничиваются: там могут быть кавычки, @ и т. п.
+ALLOWED = {"pattern": TEXT_PATTERN}
+ModelText = Annotated[str, Field(json_schema_extra=ALLOWED)]
+
+
 class LLMError(BaseModel):
     fragment: str = Field(min_length=1, max_length=200)
     correction: str = Field(max_length=200)
     type: ErrorType
-    explanation: str = Field(min_length=3, max_length=400)
-    rule: str = Field(min_length=2, max_length=80)
+    explanation: str = Field(min_length=3, max_length=400, json_schema_extra=ALLOWED)
+    rule: str = Field(min_length=2, max_length=80, json_schema_extra=ALLOWED)
 
 
 class LLMReview(BaseModel):
     """То, что возвращает модель (JSON по схеме)."""
 
     errors: list[LLMError] = Field(max_length=30)
-    summary: str = Field(min_length=5, max_length=600)
+    summary: str = Field(min_length=5, max_length=600, json_schema_extra=ALLOWED)
     cefr_level: Literal["A1", "A2", "B1", "B2"]
-    review_topics: list[str] = Field(max_length=3)
-
-    @classmethod
-    def llm_schema(cls) -> dict:
-        """Схема для ограниченного декодирования с теми же разрешёнными символами, что у тестов: при T=0 на
-        текстах уровня A1 модель писала объяснения по-китайски в 7 вызовах из 8 (eval/other_paths_cjk.py)."""
-        text = {"type": "string", "pattern": TEXT_PATTERN}
-        error = {"type": "object", "properties": {
-            # fragment и correction — цитаты из текста ученика, поэтому без ограничения символов
-            "fragment": {"type": "string"}, "correction": {"type": "string"},
-            "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
-            "explanation": text, "rule": text}, "required": ["fragment", "correction", "type", "explanation", "rule"]}
-        return {"type": "object", "properties": {
-            "errors": {"type": "array", "items": error, "maxItems": 30}, "summary": text,
-            "cefr_level": {"type": "string", "enum": ["A1", "A2", "B1", "B2"]},
-            "review_topics": {"type": "array", "items": text, "maxItems": 3}},
-            "required": ["errors", "summary", "cefr_level", "review_topics"]}
+    review_topics: list[ModelText] = Field(max_length=3)
 
     @model_validator(mode="after")
     def check_language(self) -> LLMReview:
-        if has_foreign_script(self.model_dump()):  # ошибка уйдёт модели, и она перепишет ответ
+        # fragment — цитата ученика: иероглифы там могут быть его собственными, а не сбоем модели
+        if has_foreign_script(self.model_dump(exclude={"errors": {"__all__": {"fragment"}}})):
             raise ValueError(FOREIGN_SCRIPT_ERROR)
         return self
 

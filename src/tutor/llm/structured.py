@@ -103,7 +103,8 @@ class StructuredCaller:
                 dump_llm_call(self.debug_dir, llm, messages, response, time.time() - start)
             raw = response.content
             meta = getattr(response, "response_metadata", None) or {}
-            if (meta.get("done_reason") or meta.get("finish_reason")) == "length":  # Ollama / OpenAI  # ответ оборван лимитом длины — это ошибка, не ответ
+            # ответ оборван лимитом длины — это ошибка, не ответ (done_reason у Ollama, finish_reason у OpenAI)
+            if (meta.get("done_reason") or meta.get("finish_reason")) == "length":
                 last_error = f"ответ оборвался на лимите длины ({meta.get('eval_count')} токенов)"
                 logger.warning("LLM: {} (попытка {})", last_error, attempt + 1)
                 messages = [*messages, HumanMessage(
