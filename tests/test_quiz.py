@@ -316,7 +316,7 @@ def test_choice_options_are_shuffled_by_code(retriever):
     positions = set()
     for seed in range(12):
         llm = FakeListChatModel(responses=[json.dumps({"questions": [MC]})])
-        quiz = QuizAgent(retriever, StructuredCaller(lambda schema, **_: llm, retries=0)).generate(
+        quiz = QuizAgent(retriever, StructuredCaller(lambda schema, llm=llm, **_: llm, retries=0)).generate(
             TOPIC, "A1", 1, ["multiple_choice"], seed=seed)
         q = quiz.questions[0]
         assert sorted(q.options) == sorted(MC["options"]) and q.answer == "works"
