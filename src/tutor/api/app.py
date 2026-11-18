@@ -174,7 +174,10 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
     # ------------------------------------------------------------ теория без стрима (CLI, eval, тесты)
     @app.post("/api/theory/ask")
     def ask(body: ChatRequest, user: str = Depends(current_user)) -> dict:
-        return svc().theory.answer(body.message, check_level(body.level)).model_dump()
+        try:
+            return svc().theory.answer(body.message, check_level(body.level)).model_dump()
+        except StructuredOutputError as e:
+            raise HTTPException(502, str(e)) from e
 
     # ------------------------------------------------------------ проверка работ
     @app.post("/api/review")

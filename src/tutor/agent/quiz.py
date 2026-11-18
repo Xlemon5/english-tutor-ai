@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from tutor.agent.theory import FRAGMENT_CHARS, NO_MATERIAL_TEXT, format_context, suggest_topics
 from tutor.lexicon import load_vocab, words_above_level
-from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
+from tutor.llm.language import FOREIGN_SCRIPT_ERROR, TEXT_PATTERN, has_foreign_script
 from tutor.llm.structured import ContextBudgetError, StructuredCaller, StructuredOutputError, estimate_tokens
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
@@ -30,13 +30,6 @@ MAX_TEMPERATURE = 1.0
 MAX_AVOID = 10  # сколько уже принятых заданий перечислять в «не повторяй»
 MIN_FRAGMENT_CHARS = 400
 
-# Символы, которые модель может писать в строках теста: латиница, кириллица, цифры, пунктуация, русская
-# типографика и неразрывный пробел, транскрипция (IPA есть в 31 файле материалов и в объяснениях) и знаки,
-# нужные по темам (°C, $, €, £). Шаблон уходит в JSON-схему ответа, и Ollama превращает его в грамматику:
-# иероглиф физически не может быть выбран, даже если он самый вероятный токен.
-TEXT_CHARS = ("A-Za-zА-Яа-яЁё0-9 \u00a0.,;:!?'’‘()\\[\\]/_*+=%№#&<>~^|$€£°«»„“”–—…"
-              "θðʃʒŋəɪʊæʌɔːˈˌɛɑɒɜɡ" "éèêëáàâäçíìîïñóòôöúùûü" "\\-")
-TEXT_PATTERN = f"^[{TEXT_CHARS}]*$"
 _TEXT = {"type": "string", "pattern": TEXT_PATTERN}
 QUIZ_LLM_SCHEMA = {
     "type": "object",
@@ -61,6 +54,8 @@ class LLMQuestion(BaseModel):
 
     @model_validator(mode="after")
     def check_format(self) -> LLMQuestion:
+        if type(self) is not LLMQuestion:
+            return self  # Question из сохранённого теста: правила генерации к нему не применяются
         if has_foreign_script([self.prompt, self.options, self.answer, self.explanation]):
             raise ValueError(FOREIGN_SCRIPT_ERROR)
         self.prompt = re.sub(r"_{3,}", "____", self.prompt).strip()
@@ -277,6 +272,9 @@ class QuizAgent:
                     options["temperature"] = min(MAX_TEMPERATURE, self.temperature + REPEAT_TEMPERATURE_STEP * repeats)
                 raw = self.structured(LLMQuiz, system, user, **options)
             except ContextBudgetError:
+                if accepted:  # больше раундов не поместится — отдаём то, что уже принято
+                    logger.warning("генерация теста: окно исчерпано, вопросов {}", len(accepted))
+                    break
                 raise  # не поместилось даже сокращённое — повторять бессмысленно
             except StructuredOutputError as e:
                 logger.warning("генерация теста: {}", e)

@@ -284,3 +284,29 @@ def test_quiz_prompt_shrinks_fragments_to_fit_the_window(retriever):
     retriever.settings.llm_num_ctx = retriever.settings.quiz_max_tokens + 1  # места под фрагменты нет совсем
     QuizAgent(retriever, spy).generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
     assert "[1]" in sent[0] and "[2]" not in sent[0]  # остался один фрагмент
+
+
+def test_retry_history_is_trimmed_instead_of_failing_on_window():
+    from tutor.agent.quiz import LLMQuiz
+
+    log = []
+    bad = "x" * 6000  # длинный невалидный ответ: с ним история не влезла бы в окно
+    replies = iter([_Reply(bad, num_ctx=2000, num_predict=900, log=log),
+                    _Reply('{"questions": []}', num_ctx=2000, num_predict=900, log=log)])
+
+    class Model:
+        num_ctx, num_predict = 2000, 900
+
+        def invoke(self, messages):
+            return next(replies).invoke(messages)
+
+    result = StructuredCaller(lambda schema, **_: Model(), retries=1)(LLMQuiz, "system", "user")
+    assert result.questions == []
+    assert len(log[1]) == 3 and "проверку схемы" in log[1][-1].content  # сырой ответ выброшен из истории
+
+
+def test_stored_question_is_not_revalidated_by_generation_rules():
+    from tutor.agent.quiz import Question
+
+    old = {**GAP, "prompt": "He ____ TV every evening.", "explanation": "Third person.", "id": 1, "type_ru": "x"}
+    assert Question.model_validate(old).prompt == "He ____ TV every evening."  # сохранённый до обновления тест

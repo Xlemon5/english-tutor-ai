@@ -110,3 +110,9 @@ def test_theory_refuses_question_that_does_not_fit_the_window(retriever):
     retriever.settings.llm_num_ctx = 100
     with pytest.raises(ContextBudgetError):
         TheoryAgent(retriever, ExplodingLLM(responses=["x"])).answer("third person singular ending -s or -es")
+
+
+def test_no_resume_without_assistant_prefill_support(retriever):
+    llm = FakeListChatModel(responses=["Окончание -s добав形成", "не должно вызываться"])
+    result = TheoryAgent(retriever, llm, can_resume=False).answer("third person singular ending -s or -es")
+    assert result.answer == "Окончание -s добав"

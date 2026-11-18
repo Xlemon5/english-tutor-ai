@@ -81,7 +81,7 @@ def run(args) -> None:
     calls: list[dict] = []
     # как в tutor.services.build_services: JSON-сценарии — температура 0 и до 1500 токенов ответа
     caller = StructuredCaller(lambda schema, **opts: Recorder(
-        get_chat_model(s, schema=schema, temperature=0.0, max_tokens=1500, **opts), calls))
+        get_chat_model(s, schema=schema, **({"temperature": 0.0, "max_tokens": 1500} | opts)), calls))
     use_fragments = s.quiz_use_fragments if args.mode == "settings" else args.mode == "fragments"
     agent = QuizAgent(svc.retriever, caller, use_fragments=use_fragments)
     funnel: Counter = Counter()

@@ -90,16 +90,20 @@ class StructuredCaller:
         llm = self.make_llm(fmt, **options)
         messages = [SystemMessage(system), HumanMessage(user)]
         last_error = ""
+        num_predict, num_ctx = getattr(llm, "num_predict", None), getattr(llm, "num_ctx", None)
         for attempt in range(self.retries + 1):
-            check_budget(estimate_tokens(*(str(m.content) for m in messages)),
-                         getattr(llm, "num_predict", None), getattr(llm, "num_ctx", None))
+            if attempt == 0:  # исходный запрос обязан помещаться — иначе понятная ошибка
+                check_budget(estimate_tokens(system, user), num_predict, num_ctx)
+            elif num_ctx and num_predict and estimate_tokens(*(str(m.content) for m in messages)) + num_predict > num_ctx:
+                # повтор не должен превращаться в отказ из-за собственной истории: оставляем только причину отказа
+                messages = [messages[0], messages[1], messages[-1]]
             start = time.time()
             response = llm.invoke(messages)  # type: ignore[attr-defined]
             if self.debug_dir is not None:
                 dump_llm_call(self.debug_dir, llm, messages, response, time.time() - start)
             raw = response.content
             meta = getattr(response, "response_metadata", None) or {}
-            if meta.get("done_reason") == "length":  # ответ оборван лимитом длины — это ошибка, не ответ
+            if (meta.get("done_reason") or meta.get("finish_reason")) == "length":  # Ollama / OpenAI  # ответ оборван лимитом длины — это ошибка, не ответ
                 last_error = f"ответ оборвался на лимите длины ({meta.get('eval_count')} токенов)"
                 logger.warning("LLM: {} (попытка {})", last_error, attempt + 1)
                 messages = [*messages, HumanMessage(

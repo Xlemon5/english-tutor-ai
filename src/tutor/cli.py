@@ -70,9 +70,15 @@ def search(
 @app.command()
 def ask(question: str, level: str = typer.Option("", "--level", help="A1, A2 или B1.")) -> None:
     """Задать вопрос по теории: ответ со ссылками или «В материалах этого нет»."""
+    from tutor.llm.structured import StructuredOutputError
     from tutor.services import get_services
 
-    for event in get_services().theory.stream(question, level or None):
+    try:
+        events = list(get_services().theory.stream(question, level or None))
+    except StructuredOutputError as e:
+        typer.echo(f"⚠ {e}")
+        raise typer.Exit(1) from e
+    for event in events:
         if event.type == "token":
             typer.echo(event.text, nl=False)
             continue

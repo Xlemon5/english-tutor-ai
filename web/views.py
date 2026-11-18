@@ -264,7 +264,7 @@ def page_review() -> None:
     st.caption("Вставьте текст на английском: эссе, перевод или ответы на упражнение. Требования — не выше B1.")
     with st.form("review_form"):
         task = st.text_input("Задание (необязательно)", placeholder="Write about your last weekend.")
-        text = st.text_area("Текст студента", height=220, max_chars=3000,
+        text = st.text_area("Текст студента", height=220, max_chars=2000,
                             placeholder="Yesterday I go to the park with my frend…")
         submitted = st.form_submit_button("Проверить", type="primary")
     if submitted:

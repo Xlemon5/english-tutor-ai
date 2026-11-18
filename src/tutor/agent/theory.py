@@ -82,10 +82,12 @@ def suggest_topics(result: SearchResult, limit: int = 3, threshold: float = 0.0)
 
 
 class TheoryAgent:
-    def __init__(self, retriever: Retriever, llm, resume_llm=None) -> None:
+    def __init__(self, retriever: Retriever, llm, resume_llm=None, can_resume: bool = True) -> None:
         """resume_llm — модель, которая дописывает ответ, если основная перешла на китайский
         (по умолчанию та же; в сервисах — с небольшой температурой, чтобы не повторить тот же сбой)."""
         self.retriever = retriever
+        # продолжение начатого ответа умеет Ollama; OpenAI-совместимые серверы (vLLM) начали бы ответ заново
+        self.resumes = MAX_RESUMES if can_resume else 0
         messages = [("system", "{system}"), ("human", load_prompt("theory_user"))]
         # без StrOutputParser: по последнему куску видно done_reason (обрыв по лимиту длины)
         self.chain = ChatPromptTemplate.from_messages(messages) | llm
@@ -97,7 +99,7 @@ class TheoryAgent:
         обрывается и продолжается с последнего чистого места с явным запретом (до MAX_RESUMES раз);
         не получилось — ответ заканчивается на этом месте."""
         text = ""
-        for attempt in range(MAX_RESUMES + 1):
+        for attempt in range(self.resumes + 1):
             if attempt == 0:
                 source = self.chain.stream(inputs)
             else:
@@ -110,7 +112,7 @@ class TheoryAgent:
             for chunk in source:
                 piece = chunk.content if hasattr(chunk, "content") else str(chunk)
                 meta = getattr(chunk, "response_metadata", None) or {}
-                truncated = truncated or meta.get("done_reason") == "length"
+                truncated = truncated or (meta.get("done_reason") or meta.get("finish_reason")) == "length"
                 if dangling and piece:
                     piece, dangling = piece.lstrip(" "), ""
                 tail += piece
@@ -131,7 +133,7 @@ class TheoryAgent:
                 return
             source.close()  # обрываем генерацию: дальше модель продолжила бы по-китайски
             logger.warning("ответ перешёл на китайский после «{}» (сбой {} из {})",
-                           (text + switched)[-60:], attempt + 1, MAX_RESUMES + 1)
+                           (text + switched)[-60:], attempt + 1, self.resumes + 1)
             if switched:
                 text += switched
                 yield switched

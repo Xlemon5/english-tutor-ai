@@ -7,14 +7,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from tutor.agent.quiz import TEXT_PATTERN
-from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
+from tutor.llm.language import FOREIGN_SCRIPT_ERROR, TEXT_PATTERN, has_foreign_script
 from tutor.llm.structured import StructuredCaller
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
 from tutor.retrieval.hybrid import Retriever
 
-MAX_TEXT_CHARS = 3000
+# Текст попадает в промпт дважды (целиком и по предложениям); вместе с системным промптом и ответом до 1500
+# токенов это должно помещаться в окно 4096. B1-эссе — 150–250 слов, ~1400 символов.
+MAX_TEXT_CHARS = 2000
 NOT_IN_MATERIALS = "в материалах не найдено"
 ErrorType = Literal["grammar", "vocabulary", "spelling", "punctuation", "style"]
 ERROR_TYPE_RU = {"grammar": "грамматика", "vocabulary": "лексика", "spelling": "орфография",
@@ -43,7 +44,7 @@ class LLMReview(BaseModel):
         текстах уровня A1 модель писала объяснения по-китайски в 7 вызовах из 8 (eval/other_paths_cjk.py)."""
         text = {"type": "string", "pattern": TEXT_PATTERN}
         error = {"type": "object", "properties": {
-            "fragment": text, "correction": text, "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
+            "fragment": {"type": "string"}, "correction": {"type": "string"},  # цитаты из текста ученика "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
             "explanation": text, "rule": text}, "required": ["fragment", "correction", "type", "explanation", "rule"]}
         return {"type": "object", "properties": {
             "errors": {"type": "array", "items": error, "maxItems": 30}, "summary": text,

@@ -47,7 +47,8 @@ def build_services(settings: Settings) -> Services:
         # если ответ перешёл на китайский, его дописывает модель с небольшой температурой:
         # при температуре 0 она на том же месте снова выбрала бы тот же иероглиф
         theory=TheoryAgent(retriever, get_chat_model(settings),
-                           resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE)),
+                           resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE),
+                           can_resume=settings.llm_provider.lower() == "ollama"),
         review=ReviewAgent(retriever, structured),
         quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured,
                        temperature=settings.quiz_temperature),
