@@ -218,3 +218,18 @@ def test_structured_caller_sends_the_strict_generation_schema(retriever):
 
     QuizAgent(retriever, StructuredCaller(make_llm, retries=0)).generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
     assert schemas == [QUIZ_LLM_SCHEMA]
+
+
+def test_repeated_response_raises_temperature_for_next_round(retriever):
+    chinese = json.dumps({"questions": [{**MC, "explanation": "第三人称单数。"}]})
+    llm = FakeListChatModel(responses=[chinese, chinese, json.dumps({"questions": [MC]})])
+    options = []
+
+    def make_llm(schema, **opts):
+        options.append(opts)
+        return llm
+
+    agent = QuizAgent(retriever, StructuredCaller(make_llm, retries=0), temperature=0.7)
+    agent.generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
+    assert "temperature" not in options[0] and "temperature" not in options[1]
+    assert options[2]["temperature"] == pytest.approx(0.85)  # второй раунд повторил первый

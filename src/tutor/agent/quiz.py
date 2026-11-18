@@ -1,6 +1,7 @@
 """Сценарий «тест»: генерация по материалам, проверка ответов студента и разбор."""
 from __future__ import annotations
 
+import json
 import random
 import re
 import uuid
@@ -24,6 +25,8 @@ MAX_QUESTIONS = 15
 BATCH = 4
 MAX_ROUNDS = 5
 MAX_HARD_WORDS = 1  # сколько слов выше уровня допускается в одном задании
+REPEAT_TEMPERATURE_STEP = 0.15  # на сколько поднять температуру, если модель повторила ответ прошлого раунда
+MAX_TEMPERATURE = 1.0
 
 # Символы, которые модель может писать в строках теста: латиница, кириллица, цифры, пунктуация, русская
 # типографика и неразрывный пробел, транскрипция (IPA есть в 31 файле материалов и в объяснениях) и знаки,
@@ -203,7 +206,7 @@ def plan_types(n: int, types: list[str]) -> list[str]:
 
 class QuizAgent:
     def __init__(self, retriever: Retriever, structured: StructuredCaller, use_fragments: bool = True,
-                 judge: StructuredCaller | None = None) -> None:
+                 judge: StructuredCaller | None = None, temperature: float = 0.7) -> None:
         """structured — генерация вопросов (с сэмплингом), judge — оценка свободных ответов студента
         (по умолчанию тот же вызывающий; в приложении — детерминированный).
         use_fragments=False — модель составляет предложения сама, без фрагментов в промпте;
@@ -212,6 +215,7 @@ class QuizAgent:
         self.structured = structured
         self.judge = judge or structured
         self.use_fragments = use_fragments
+        self.temperature = temperature  # температура генерации; от неё считается повышение при повторах
 
     def generate(self, topic: str, level: str = "A2", n: int = 5, types: list[str] | None = None,
                  allow_without_materials: bool = False, seed: int | None = None) -> Quiz:
@@ -246,6 +250,8 @@ class QuizAgent:
         wanted = plan_types(n, types)
         base_seed = seed if seed is not None else random.randrange(1, 2**31 - MAX_ROUNDS)
         logger.info("генерация теста «{}» ({}): seed {}", topic, level, base_seed)
+        responses: set[str] = set()
+        repeats = 0  # сколько раз модель вернула ответ, уже полученный в прошлом раунде
         for round_no in range(MAX_ROUNDS):
             missing = list(wanted)
             for q in accepted:  # чего не хватает — считаем по типам, а не по позициям
@@ -264,10 +270,18 @@ class QuizAgent:
             user = user_template.format(
                 topic=topic, level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid, context=context)
             try:
-                raw = self.structured(LLMQuiz, system, user, seed=base_seed + round_no)
+                options = {"seed": base_seed + round_no}
+                if repeats:  # тот же ответ уже был: одного нового seed не хватило — выбираем свободнее
+                    options["temperature"] = min(MAX_TEMPERATURE, self.temperature + REPEAT_TEMPERATURE_STEP * repeats)
+                raw = self.structured(LLMQuiz, system, user, **options)
             except StructuredOutputError as e:
                 logger.warning("генерация теста: {}", e)
                 continue
+            fingerprint = json.dumps(raw.questions, ensure_ascii=False, sort_keys=True)
+            if fingerprint in responses:
+                repeats += 1
+                logger.info("модель повторила ответ прошлого раунда (повтор {}), поднимаю температуру", repeats)
+            responses.add(fingerprint)
             pending = list(missing)
             for item in raw.questions:
                 try:

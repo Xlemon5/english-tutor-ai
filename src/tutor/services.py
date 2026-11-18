@@ -36,11 +36,11 @@ def build_services(settings: Settings) -> Services:
         lambda schema, **opts: get_chat_model(settings, schema=schema, temperature=0.0, max_tokens=1500, **opts),
         debug_dir=debug_dir)
     # генерация тестов — сэмплинг из конфига; seed задаёт агент на каждый раунд
-    quiz_structured = StructuredCaller(
-        lambda schema, **opts: get_chat_model(
-            settings, schema=schema, temperature=settings.quiz_temperature, top_p=settings.quiz_top_p,
-            top_k=settings.quiz_top_k, repeat_penalty=settings.quiz_repeat_penalty,
-            max_tokens=settings.quiz_max_tokens, **opts),
+    quiz_sampling = {"temperature": settings.quiz_temperature, "top_p": settings.quiz_top_p,
+                     "top_k": settings.quiz_top_k, "repeat_penalty": settings.quiz_repeat_penalty,
+                     "max_tokens": settings.quiz_max_tokens}
+    quiz_structured = StructuredCaller(  # параметры вызова (seed, temperature) переопределяют значения из конфига
+        lambda schema, **opts: get_chat_model(settings, schema=schema, **(quiz_sampling | opts)),
         debug_dir=debug_dir)
     return Services(
         settings=settings, store=store, retriever=retriever,
@@ -49,7 +49,8 @@ def build_services(settings: Settings) -> Services:
         theory=TheoryAgent(retriever, get_chat_model(settings),
                            resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE)),
         review=ReviewAgent(retriever, structured),
-        quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured),
+        quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured,
+                       temperature=settings.quiz_temperature),
     )
 
 
