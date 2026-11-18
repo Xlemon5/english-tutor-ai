@@ -310,3 +310,15 @@ def test_stored_question_is_not_revalidated_by_generation_rules():
 
     old = {**GAP, "prompt": "He ____ TV every evening.", "explanation": "Third person.", "id": 1, "type_ru": "x"}
     assert Question.model_validate(old).prompt == "He ____ TV every evening."  # сохранённый до обновления тест
+
+
+def test_choice_options_are_shuffled_by_code(retriever):
+    positions = set()
+    for seed in range(12):
+        llm = FakeListChatModel(responses=[json.dumps({"questions": [MC]})])
+        quiz = QuizAgent(retriever, StructuredCaller(lambda schema, **_: llm, retries=0)).generate(
+            TOPIC, "A1", 1, ["multiple_choice"], seed=seed)
+        q = quiz.questions[0]
+        assert sorted(q.options) == sorted(MC["options"]) and q.answer == "works"
+        positions.add(q.options.index("works"))
+    assert positions == {0, 1, 2}  # верный ответ бывает на любой позиции

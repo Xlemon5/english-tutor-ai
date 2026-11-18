@@ -317,7 +317,11 @@ class QuizAgent:
         by_n = {c.n: c for c in citations}
         questions = []
         accepted.sort(key=lambda q: wanted.index(q.type))  # порядок типов как в запросе (сортировка устойчива)
+        rng = random.Random(base_seed)  # тот же seed — тот же порядок (воспроизводимо в eval)
         for i, q in enumerate(accepted[:n], 1):
+            if q.type == "multiple_choice":
+                # модель ставит верный ответ почти всегда на A или B (замер: A 47%, B 47%, C 6%) — перемешиваем сами
+                rng.shuffle(q.options)
             citation = by_n.get(q.fragment) or (citations[0] if citations else None)
             questions.append(Question(**q.model_dump(), id=i, type_ru=TYPE_RU[q.type], citation=citation))
         if not questions:
