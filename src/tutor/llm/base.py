@@ -61,6 +61,7 @@ def get_chat_model(settings: Settings, *, schema: dict | None = None, temperatur
             model=settings.llm_model, base_url=settings.ollama_base_url, temperature=temp,
             num_ctx=settings.llm_num_ctx, num_predict=limit, keep_alive=settings.llm_keep_alive, format=schema,
             top_p=top_p, top_k=top_k, repeat_penalty=repeat_penalty, seed=seed,
+            client_kwargs={"timeout": settings.llm_timeout},
         )
     if provider == "openai":
         try:

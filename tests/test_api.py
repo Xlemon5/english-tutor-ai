@@ -180,3 +180,19 @@ def test_router_plan_intent():
     assert route("С чего мне начать изучение английского?").intent == "plan"
     assert route("Сделай тест по Past Simple, A2").intent == "quiz"
     assert route("Когда используется Present Perfect?").intent == "theory"
+
+
+def test_model_down_and_bad_json_give_clear_messages(settings, embedder, store, tmp_path, monkeypatch):
+    from tutor.api.app import MODEL_DOWN, MODEL_FAILED
+
+    client = make_client(settings, embedder, store, tmp_path, structured=[{"questions": "не список"}])
+    headers = login(client)
+    r = client.post("/api/quiz/generate", headers=headers, json={"topic": TOPIC, "level": "A1", "count": 1})
+    assert r.status_code == 502 and r.json()["detail"] in (MODEL_FAILED, "Не удалось составить ни одного корректного вопроса.")
+
+    def down(*args, **kwargs):
+        raise ConnectionError("Failed to connect to Ollama")
+
+    monkeypatch.setattr(Retriever, "search", down)
+    r = client.post("/api/quiz/generate", headers=headers, json={"topic": TOPIC, "level": "A1"})
+    assert r.status_code == 503 and r.json()["detail"] == MODEL_DOWN

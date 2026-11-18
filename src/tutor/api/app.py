@@ -5,16 +5,17 @@ import json
 import sqlite3
 from collections.abc import Iterator
 
+import httpx
 import yaml
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from tutor.agent.plan import build_plan, plan_summary
 from tutor.agent.quiz import TYPE_RU, Quiz
 from tutor.agent.router import route
-from tutor.llm.structured import StructuredOutputError
+from tutor.llm.structured import ContextBudgetError, StructuredOutputError
 from tutor.models import LEVELS
 from tutor.services import Services, get_services
 from tutor.storage import Storage
@@ -54,8 +55,37 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+MODEL_DOWN = "Модель недоступна: не удаётся связаться с Ollama. Проверьте, что она запущена (ollama serve)."
+MODEL_TIMEOUT = "Модель не ответила вовремя. Попробуйте ещё раз: после простоя первый запрос загружает модель."
+MODEL_FAILED = "Модель не смогла дать корректный ответ. Попробуйте ещё раз или переформулируйте запрос."
+
+
+def user_message(e: Exception) -> str:
+    """Текст ошибки для пользователя: технические подробности (разбор JSON, схемы) остаются в журнале."""
+    if isinstance(e, ConnectionError | httpx.ConnectError):
+        return MODEL_DOWN
+    if isinstance(e, httpx.TimeoutException):
+        return MODEL_TIMEOUT
+    if isinstance(e, StructuredOutputError) and not isinstance(e, ContextBudgetError) \
+            and str(e).startswith("LLM не вернула"):
+        logger.warning("ответ модели не прошёл проверку: {}", e)
+        return MODEL_FAILED
+    return str(e)
+
+
 def create_app(services: Services | None = None, storage: Storage | None = None) -> FastAPI:
     app = FastAPI(title="English Tutor API", version="0.1.0")
+
+    @app.exception_handler(ConnectionError)
+    @app.exception_handler(httpx.ConnectError)
+    def model_down(request: Request, e: Exception) -> JSONResponse:
+        logger.error("нет связи с моделью: {}", e)
+        return JSONResponse(status_code=503, content={"detail": MODEL_DOWN})
+
+    @app.exception_handler(httpx.TimeoutException)
+    def model_timeout(request: Request, e: Exception) -> JSONResponse:
+        logger.error("модель не ответила вовремя: {}", e)
+        return JSONResponse(status_code=504, content={"detail": MODEL_TIMEOUT})
     state: dict = {"services": services, "storage": storage}
 
     def svc() -> Services:
@@ -149,11 +179,12 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
                         else:
                             payload = {"kind": "theory", **event.result.model_dump()}
             except (StructuredOutputError, ValueError) as e:
-                yield sse("error", {"message": str(e)})
+                yield sse("error", {"message": user_message(e)})
                 return
             except Exception as e:  # noqa: BLE001
                 logger.exception("ошибка чата")
-                yield sse("error", {"message": f"Не удалось получить ответ модели: {e}"})
+                down = isinstance(e, ConnectionError | httpx.ConnectError | httpx.TimeoutException)
+                yield sse("error", {"message": user_message(e) if down else f"Не удалось получить ответ модели: {e}"})
                 return
             db().add_message(user, "assistant", payload.get("answer") or payload.get("summary") or
                              payload.get("message") or "", payload)
@@ -177,7 +208,7 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
         try:
             return svc().theory.answer(body.message, check_level(body.level)).model_dump()
         except StructuredOutputError as e:
-            raise HTTPException(502, str(e)) from e
+            raise HTTPException(502, user_message(e)) from e
 
     # ------------------------------------------------------------ проверка работ
     @app.post("/api/review")
@@ -187,7 +218,7 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         except StructuredOutputError as e:
-            raise HTTPException(502, str(e)) from e
+            raise HTTPException(502, user_message(e)) from e
         result["id"] = db().add_review(user, result)
         return result
 
@@ -201,7 +232,7 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
         try:
             quiz = svc().quiz.generate(body.topic, level, body.count, body.types, body.allow_without_materials)
         except StructuredOutputError as e:
-            raise HTTPException(502, str(e)) from e
+            raise HTTPException(502, user_message(e)) from e
         if quiz.status == "ready":
             db().add_quiz(user, quiz.model_dump())
         return quiz.model_dump()
