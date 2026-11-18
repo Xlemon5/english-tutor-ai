@@ -129,3 +129,21 @@ def test_review_generation_schema_forbids_cjk():
     assert not re.fullmatch(TEXT_PATTERN, "Для第三人称单数需要使用 goes")
     assert re.fullmatch(TEXT_PATTERN, "После she нужен глагол с -s: goes.")
     assert "pattern" not in error["fragment"] and "pattern" not in error["correction"]  # цитаты ученика — как есть
+
+
+def test_generation_schemas_define_every_required_field():
+    # поле type однажды пропало из схемы проверки работ, и модель перестала его выдавать
+    from tutor.agent.quiz import QUIZ_LLM_SCHEMA
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "required" in node:
+                assert set(node["required"]) <= set(node.get("properties", {})), node["required"]
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(LLMReview.llm_schema())
+    walk(QUIZ_LLM_SCHEMA)

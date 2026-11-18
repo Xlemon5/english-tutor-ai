@@ -44,7 +44,9 @@ class LLMReview(BaseModel):
         текстах уровня A1 модель писала объяснения по-китайски в 7 вызовах из 8 (eval/other_paths_cjk.py)."""
         text = {"type": "string", "pattern": TEXT_PATTERN}
         error = {"type": "object", "properties": {
-            "fragment": {"type": "string"}, "correction": {"type": "string"},  # цитаты из текста ученика "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
+            # fragment и correction — цитаты из текста ученика, поэтому без ограничения символов
+            "fragment": {"type": "string"}, "correction": {"type": "string"},
+            "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
             "explanation": text, "rule": text}, "required": ["fragment", "correction", "type", "explanation", "rule"]}
         return {"type": "object", "properties": {
             "errors": {"type": "array", "items": error, "maxItems": 30}, "summary": text,
