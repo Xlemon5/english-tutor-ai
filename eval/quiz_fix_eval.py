@@ -4,6 +4,7 @@
     uv run python eval/quiz_fix_eval.py --label final --matrix full      # 7 тем × A1, A2, B1 × 3 seed + особые входы
     uv run python eval/quiz_fix_eval.py --calibrate-judge                # судья против ручной разметки
     uv run python eval/quiz_fix_eval.py --table baseline fix1 fix2       # сводная таблица по готовым прогонам
+    uv run python eval/quiz_fix_eval.py --resummarize baseline fix1      # пересчитать сводки после новых метрик
 
 Агент собирается тем же кодом, что в приложении (tutor.services.build_services); подменяется только фабрика
 моделей, чтобы записывать каждый вызов. Судья — отдельный вызов той же локальной модели при T=0 со своим
@@ -237,9 +238,13 @@ def run(args) -> None:
             done += 1
             print(f"[{done}/{total}] {topic[:32]} | {level} | seed {seed}: {row['status']}, вопросов "
                   f"{len(row['questions'])}, {row['seconds']} с, вызовов {len(calls)}", flush=True)
-    summary = summarize(out, settings.llm_num_ctx)
-    (OUT / f"{args.label}.summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1))
-    print_summary(args.label, summary)
+    print_summary(args.label, write_summary(args.label, settings.llm_num_ctx))
+
+
+def write_summary(label: str, num_ctx: int) -> dict:
+    summary = summarize(OUT / f"{label}.jsonl", num_ctx)
+    (OUT / f"{label}.summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1))
+    return summary
 
 
 def share(k: int, n: int) -> dict:
@@ -248,6 +253,11 @@ def share(k: int, n: int) -> dict:
 
 
 def summarize(path: Path, num_ctx: int) -> dict:
+    """num_ctx — окно по умолчанию, если у вызова оно не записано (окно каждого вызова хранится в options)."""
+
+    def ctx(c: dict) -> int:
+        return (c.get("options") or {}).get("num_ctx") or num_ctx
+
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     matrix = [r for r in rows if r["kind"] == "матрица"]
     calls = [c for r in matrix for c in r["calls"]]
@@ -276,8 +286,8 @@ def summarize(path: Path, num_ctx: int) -> dict:
         "json_ok": share(sum(c["json_ok"] for c in calls), len(calls)),
         "items_schema_ok": share(sum(c["items_ok"] for c in calls), sum(c["items"] for c in calls)),
         "dup_tests": share(sum(near_dup(r) for r in ready), len(ready)),
-        "truncated": share(sum((c["prompt_tokens"] or 0) >= num_ctx - CTX_MARGIN for c in calls), len(calls)),
-        "overflow": share(sum((c["prompt_tokens"] or 0) + (c["output_tokens"] or 0) > num_ctx for c in calls), len(calls)),
+        "truncated": share(sum((c["prompt_tokens"] or 0) >= ctx(c) - CTX_MARGIN for c in calls), len(calls)),
+        "overflow": share(sum((c["prompt_tokens"] or 0) + (c["output_tokens"] or 0) > ctx(c) for c in calls), len(calls)),
         "done_length": share(sum(c["done_reason"] == "length" for c in calls), len(calls)),
         "max_prompt_tokens": max((c["prompt_tokens"] or 0 for c in calls), default=0),
         "max_total_tokens": max(((c["prompt_tokens"] or 0) + (c["output_tokens"] or 0) for c in calls), default=0),
@@ -299,7 +309,9 @@ def summarize(path: Path, num_ctx: int) -> dict:
     }
 
 
-def fmt(s: dict) -> str:
+def fmt(s: dict | None) -> str:
+    if s is None:  # метрики нет в старой сводке — пересчитайте её через --resummarize
+        return "—"
     if not isinstance(s, dict):
         return str(s)
     if "n" not in s:  # распределение позиций ответа: {"A": 3, "B": 7, ...}
@@ -330,8 +342,8 @@ ROWS = [("Тест собран полностью (5 из 5)", "full_test"), ("
 def print_summary(label: str, s: dict) -> None:
     print(f"\n== {label}: генераций {s['generations']}, вызовов {s['calls']}")
     for title, key in ROWS:
-        value = f"{s['max_prompt_tokens']} / {s['max_total_tokens']}" if key is None else fmt(s[key])
-        print(f"  {title:<40} {value}")
+        value = f"{s['max_prompt_tokens']} / {s['max_total_tokens']}" if key is None else fmt(s.get(key))
+        print(f"  {title:<46} {value}")
     for sp in s["special"]:
         print(f"  особый вход «{sp['kind']}», seed {sp['seed']}: {sp['status']}, вопросов {sp['questions']} — {sp['first']}")
 
@@ -340,7 +352,7 @@ def table(labels: list[str]) -> None:
     sums = {lb: json.loads((OUT / f"{lb}.summary.json").read_text()) for lb in labels}
     print("| Метрика | " + " | ".join(labels) + " |\n|---|" + "---|" * len(labels))
     for title, key in ROWS:
-        cells = [f"{s['max_prompt_tokens']} / {s['max_total_tokens']}" if key is None else fmt(s[key])
+        cells = [f"{s['max_prompt_tokens']} / {s['max_total_tokens']}" if key is None else fmt(s.get(key))
                  for s in sums.values()]
         print(f"| {title} | " + " | ".join(cells) + " |")
 
@@ -406,18 +418,20 @@ def main() -> None:
     ap.add_argument("--matrix", choices=["small", "full"], default="small")
     ap.add_argument("--calibrate-judge", action="store_true")
     ap.add_argument("--calibrate-solver", action="store_true")
-    ap.add_argument("--table", nargs="*")
-    ap.add_argument("--resummarize", nargs="*", help="пересчитать сводки по готовым .jsonl")
+    ap.add_argument("--table", nargs="+")
+    ap.add_argument("--resummarize", nargs="+", help="пересчитать сводки по готовым .jsonl")
     ap.add_argument("--resume", action="store_true", help="дописать недостающие ячейки в существующий файл")
     args = ap.parse_args()
     if args.resummarize:
+        missing = [lb for lb in args.resummarize if not (OUT / f"{lb}.jsonl").exists()]
+        if missing:
+            raise SystemExit(f"Нет прогонов: {', '.join(missing)} (ожидались файлы в {OUT})")
         for lb in args.resummarize:
-            (OUT / f"{lb}.summary.json").write_text(json.dumps(
-                summarize(OUT / f"{lb}.jsonl", get_settings().llm_num_ctx), ensure_ascii=False, indent=1))
+            print_summary(lb, write_summary(lb, get_settings().llm_num_ctx))
     if args.table:
         table(args.table)
     elif args.resummarize:
-        pass
+        return
     elif args.calibrate_judge:
         calibrate()
     elif args.calibrate_solver:
