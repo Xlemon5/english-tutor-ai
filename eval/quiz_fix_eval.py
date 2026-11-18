@@ -277,6 +277,7 @@ def summarize(path: Path, num_ctx: int) -> dict:
         "items_schema_ok": share(sum(c["items_ok"] for c in calls), sum(c["items"] for c in calls)),
         "dup_tests": share(sum(near_dup(r) for r in ready), len(ready)),
         "truncated": share(sum((c["prompt_tokens"] or 0) >= num_ctx - CTX_MARGIN for c in calls), len(calls)),
+        "overflow": share(sum((c["prompt_tokens"] or 0) + (c["output_tokens"] or 0) > num_ctx for c in calls), len(calls)),
         "done_length": share(sum(c["done_reason"] == "length" for c in calls), len(calls)),
         "max_prompt_tokens": max((c["prompt_tokens"] or 0 for c in calls), default=0),
         "max_total_tokens": max(((c["prompt_tokens"] or 0) + (c["output_tokens"] or 0) for c in calls), default=0),
@@ -315,6 +316,7 @@ ROWS = [("Тест собран полностью (5 из 5)", "full_test"), ("
         ("Сырые ответы модели с иероглифами", "raw_cjk"), ("Показанные тесты с иероглифами", "shown_cjk"),
         ("Валидный JSON", "json_ok"), ("Вопросы, прошедшие схему и проверки", "items_schema_ok"),
         ("Тесты с почти-дубликатами (>0.85)", "dup_tests"), ("Обрезанные промпты", "truncated"),
+        ("Промпт + ответ больше окна (сдвиг контекста)", "overflow"),
         ("Ответы, упёршиеся в лимит (length)", "done_length"), ("Вызовов модели на тест", "calls_per_test"),
         ("Повтор того же запроса подряд", "same_request_twice"), ("Ключ верен (по коду)", "key_ok"),
         ("Судья: эталон верен", "judge_answer_correct"), ("Судья: правильный ответ один", "judge_single_correct"),
@@ -405,10 +407,17 @@ def main() -> None:
     ap.add_argument("--calibrate-judge", action="store_true")
     ap.add_argument("--calibrate-solver", action="store_true")
     ap.add_argument("--table", nargs="*")
+    ap.add_argument("--resummarize", nargs="*", help="пересчитать сводки по готовым .jsonl")
     ap.add_argument("--resume", action="store_true", help="дописать недостающие ячейки в существующий файл")
     args = ap.parse_args()
+    if args.resummarize:
+        for lb in args.resummarize:
+            (OUT / f"{lb}.summary.json").write_text(json.dumps(
+                summarize(OUT / f"{lb}.jsonl", get_settings().llm_num_ctx), ensure_ascii=False, indent=1))
     if args.table:
         table(args.table)
+    elif args.resummarize:
+        pass
     elif args.calibrate_judge:
         calibrate()
     elif args.calibrate_solver:
