@@ -60,7 +60,10 @@ class StructuredCaller:
 
     def __call__(self, schema: type[T], system: str, user: str, **options) -> T:
         """options — параметры этого вызова для фабрики модели, например seed."""
-        llm = self.make_llm(schema.model_json_schema(), **options)
+        # у модели может быть своя, более строгая схема для декодирования (например, с разрешёнными символами);
+        # проверка ответа всё равно идёт по pydantic-модели
+        fmt = schema.llm_schema() if hasattr(schema, "llm_schema") else schema.model_json_schema()
+        llm = self.make_llm(fmt, **options)
         messages = [SystemMessage(system), HumanMessage(user)]
         last_error = ""
         for attempt in range(self.retries + 1):

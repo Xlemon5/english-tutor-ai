@@ -188,3 +188,33 @@ def test_regeneration_rounds_never_send_identical_requests(retriever):
     assert [r["seed"] for r in requests] == [7, 8, 9]  # каждый раунд — свой seed
     # раунды 2 и 3 получают одинаковую обратную связь, но запрос всё равно разный
     assert all(a != b for a, b in itertools.pairwise(requests))
+
+
+def test_generation_schema_allows_typography_and_ipa_but_not_cjk():
+    import re
+
+    from tutor.agent.quiz import QUIZ_LLM_SCHEMA, TEXT_PATTERN, LLMQuiz
+
+    allowed = ["После she глагол получает -s: «works» — правильно…", "It’s 25 °C, $5 or €4 — № 3",
+               "Окончание -es читается [ɪz], как в /tʃ/ watches", "She ____ (watch) TV.", "a\u00a0b [ə]"]
+    for text in allowed:
+        assert re.fullmatch(TEXT_PATTERN, text), text
+    for text in ["第三人称单数", "ひらがな", "한국어", "，"]:
+        assert not re.fullmatch(TEXT_PATTERN, text), text
+    item = QUIZ_LLM_SCHEMA["properties"]["questions"]["items"]["properties"]
+    assert item["explanation"]["pattern"] == TEXT_PATTERN and item["options"]["items"]["pattern"] == TEXT_PATTERN
+    assert LLMQuiz.llm_schema() is QUIZ_LLM_SCHEMA
+
+
+def test_structured_caller_sends_the_strict_generation_schema(retriever):
+    from tutor.agent.quiz import QUIZ_LLM_SCHEMA
+
+    schemas = []
+    llm = FakeListChatModel(responses=[json.dumps({"questions": [MC]})])
+
+    def make_llm(schema, **options):
+        schemas.append(schema)
+        return llm
+
+    QuizAgent(retriever, StructuredCaller(make_llm, retries=0)).generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
+    assert schemas == [QUIZ_LLM_SCHEMA]

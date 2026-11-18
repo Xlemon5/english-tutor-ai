@@ -25,6 +25,26 @@ BATCH = 4
 MAX_ROUNDS = 5
 MAX_HARD_WORDS = 1  # сколько слов выше уровня допускается в одном задании
 
+# Символы, которые модель может писать в строках теста: латиница, кириллица, цифры, пунктуация, русская
+# типографика и неразрывный пробел, транскрипция (IPA есть в 31 файле материалов и в объяснениях) и знаки,
+# нужные по темам (°C, $, €, £). Шаблон уходит в JSON-схему ответа, и Ollama превращает его в грамматику:
+# иероглиф физически не может быть выбран, даже если он самый вероятный токен.
+TEXT_CHARS = ("A-Za-zА-Яа-яЁё0-9 \u00a0.,;:!?'’‘()\\[\\]/_*+=%№#&<>~^|$€£°«»„“”–—…"
+              "θðʃʒŋəɪʊæʌɔːˈˌɛɑɒɜɡ" "éèêëáàâäçíìîïñóòôöúùûü" "\\-")
+TEXT_PATTERN = f"^[{TEXT_CHARS}]*$"
+_TEXT = {"type": "string", "pattern": TEXT_PATTERN}
+QUIZ_LLM_SCHEMA = {
+    "type": "object",
+    "properties": {"questions": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"type": {"type": "string", "enum": ["multiple_choice", "fill_gap", "error_correction",
+                                                          "translation"]},
+                       "prompt": _TEXT, "options": {"type": "array", "items": _TEXT, "maxItems": 4},
+                       "answer": _TEXT, "explanation": _TEXT, "fragment": {"type": "integer"}},
+        "required": ["type", "prompt", "options", "answer", "explanation"]}}},
+    "required": ["questions"],
+}
+
 
 class LLMQuestion(BaseModel):
     type: QuestionType
@@ -99,6 +119,11 @@ def check_content(q: LLMQuestion) -> None:
 
 class LLMQuiz(BaseModel):
     questions: list[dict]  # вопросы проверяются по одному, чтобы один плохой не губил весь ответ
+
+    @classmethod
+    def llm_schema(cls) -> dict:
+        """Схема для ограниченного декодирования: поля вопроса и разрешённые символы (см. TEXT_PATTERN)."""
+        return QUIZ_LLM_SCHEMA
 
 
 class Question(LLMQuestion):
