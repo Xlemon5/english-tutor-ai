@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from tutor.agent.quiz import TEXT_PATTERN
 from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
 from tutor.llm.structured import StructuredCaller
 from tutor.prompts import load_prompt
@@ -35,6 +36,20 @@ class LLMReview(BaseModel):
     summary: str = Field(min_length=5, max_length=600)
     cefr_level: Literal["A1", "A2", "B1", "B2"]
     review_topics: list[str] = Field(max_length=3)
+
+    @classmethod
+    def llm_schema(cls) -> dict:
+        """Схема для ограниченного декодирования с теми же разрешёнными символами, что у тестов: при T=0 на
+        текстах уровня A1 модель писала объяснения по-китайски в 7 вызовах из 8 (eval/other_paths_cjk.py)."""
+        text = {"type": "string", "pattern": TEXT_PATTERN}
+        error = {"type": "object", "properties": {
+            "fragment": text, "correction": text, "type": {"type": "string", "enum": list(ERROR_TYPE_RU)},
+            "explanation": text, "rule": text}, "required": ["fragment", "correction", "type", "explanation", "rule"]}
+        return {"type": "object", "properties": {
+            "errors": {"type": "array", "items": error, "maxItems": 30}, "summary": text,
+            "cefr_level": {"type": "string", "enum": ["A1", "A2", "B1", "B2"]},
+            "review_topics": {"type": "array", "items": text, "maxItems": 3}},
+            "required": ["errors", "summary", "cefr_level", "review_topics"]}
 
     @model_validator(mode="after")
     def check_language(self) -> LLMReview:

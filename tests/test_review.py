@@ -116,3 +116,15 @@ def test_chinese_in_review_is_rejected_and_retried(retriever):
     chinese = json.dumps({**GOOD, "summary": "Текст понятный, но 动词形式有错误."})
     result = ReviewAgent(retriever, caller(chinese, json.dumps(GOOD))).review(TEXT)
     assert result.summary == GOOD["summary"]
+
+
+def test_review_generation_schema_forbids_cjk():
+    import re
+
+    from tutor.agent.quiz import TEXT_PATTERN
+
+    schema = LLMReview.llm_schema()
+    error = schema["properties"]["errors"]["items"]["properties"]
+    assert error["explanation"]["pattern"] == TEXT_PATTERN == schema["properties"]["summary"]["pattern"]
+    assert not re.fullmatch(TEXT_PATTERN, "Для第三人称单数需要使用 goes")
+    assert re.fullmatch(TEXT_PATTERN, "После she нужен глагол с -s: goes.")
