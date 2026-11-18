@@ -11,6 +11,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from tutor.agent.theory import FRAGMENT_CHARS, NO_MATERIAL_TEXT, format_context, suggest_topics
+from tutor.agent.topics import above_level, match_topic
 from tutor.lexicon import load_vocab, words_above_level
 from tutor.llm.language import FOREIGN_SCRIPT_ERROR, TEXT_PATTERN, has_foreign_script
 from tutor.llm.structured import ContextBudgetError, StructuredCaller, StructuredOutputError, estimate_tokens
@@ -27,6 +28,8 @@ MAX_ROUNDS = 5
 MAX_HARD_WORDS = 1  # сколько слов выше уровня допускается в одном задании
 REPEAT_TEMPERATURE_STEP = 0.15  # на сколько поднять температуру, если модель повторила ответ прошлого раунда
 MAX_TEMPERATURE = 1.0
+WRITING_TYPES = ("multiple_choice", "error_correction")  # перевод и пропуски плохо проверяют темы по письму
+SEARCH_K = 8  # кандидатов из поиска; после подъёма фрагментов нужной темы в промпт идут 4
 MAX_AVOID = 10  # сколько уже принятых заданий перечислять в «не повторяй»
 MIN_FRAGMENT_CHARS = 400
 
@@ -197,6 +200,20 @@ def example_keys(system: str) -> set[str]:
     return {question_key(p) for p in re.findall(r'"prompt": "([^"]+)"', system)}
 
 
+def covered(search, info: dict | None) -> bool:
+    """Тема есть в материалах: поиск уверен, или среди найденного есть фрагменты с пометкой этой темы по карте."""
+    return search.relevant or bool(info and any(info["id"] in h.chunk.topics for h in search.hits))
+
+
+def rank_by_topic(hits: list, info: dict | None) -> list:
+    """Сначала фрагменты, чей заголовок подходит под тему карты, потом помеченные ею файлы, потом остальное."""
+    if not info:
+        return hits
+    heading = [h for h in hits if info["re"].search(f"{h.chunk.doc_title} {h.chunk.section}")]
+    tagged = [h for h in hits if info["id"] in h.chunk.topics and h not in heading]
+    return heading + tagged + [h for h in hits if h not in heading and h not in tagged]
+
+
 def plan_types(n: int, types: list[str]) -> list[str]:
     return [types[i % len(types)] for i in range(n)]
 
@@ -222,12 +239,24 @@ class QuizAgent:
         types = [t for t in (types or list(TYPE_RU)) if t in TYPE_RU] or list(TYPE_RU)
         n = max(1, min(n, MAX_QUESTIONS))
         quiz_id = uuid.uuid4().hex[:12]
-        search = self.retriever.search(topic, k=4, level=level)
-        if not search.relevant:  # на запрошенном уровне нет — пробуем любые уровни
-            search = self.retriever.search(topic, k=4)
+        info = match_topic(topic, self.retriever.settings.materials_dir)
+        notes = []
+        if info and above_level(info, level):
+            notes.append(f"Тема «{info['title']}» относится к уровню {info['level']}: "
+                         f"на уровне {level} часть заданий может не получиться.")
+        if info and info["area"] == "writing":
+            fit = [t for t in types if t in WRITING_TYPES] or list(WRITING_TYPES)
+            if fit != types:
+                notes.append("Для темы по письму оставлены выбор ответа и исправление ошибок.")
+                types = fit
+        # название из карты тем помогает поиску на коротких запросах («Articles» → «Артикли a/an/the»)
+        query = topic if not info or info["title"].lower() in topic.lower() else f"{topic} ({info['title']})"
+        search = self.retriever.search(query, k=SEARCH_K, level=level)
+        if not covered(search, info):  # на запрошенном уровне нет — пробуем любые уровни
+            search = self.retriever.search(query, k=SEARCH_K)
         citations: list[Citation] = []
-        if search.relevant:
-            citations = build_citations(search.hits)
+        if covered(search, info):
+            citations = build_citations(rank_by_topic(search.hits, info)[:4])
         elif not allow_without_materials:
             return Quiz(
                 id=quiz_id, status="no_material", topic=topic, level=level, grounded=False,
@@ -326,7 +355,8 @@ class QuizAgent:
             questions.append(Question(**q.model_dump(), id=i, type_ru=TYPE_RU[q.type], citation=citation))
         if not questions:
             raise StructuredOutputError("Не удалось составить ни одного корректного вопроса.")
-        return Quiz(id=quiz_id, topic=topic, level=level, grounded=bool(citations), questions=questions)
+        return Quiz(id=quiz_id, topic=topic, level=level, grounded=bool(citations), questions=questions,
+                    message=" ".join(notes))
 
     def _fit_prompt(self, system: str, template: str, citations: list[Citation], **fields: str) -> str:
         """Промпт раунда. Если вместе с максимальным ответом он не помещается в окно, сначала укорачиваются

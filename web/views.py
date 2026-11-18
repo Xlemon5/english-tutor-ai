@@ -333,6 +333,8 @@ def page_quiz() -> None:
         return
     st.divider()
     st.subheader(f"{quiz['topic']} · {quiz['level']}")
+    if quiz.get("message"):  # например, «тема относится к уровню B1»
+        st.info(quiz["message"])
     if not quiz["grounded"]:
         st.warning("Тест составлен без опоры на материалы: ссылок на теорию в нём нет.", icon="⚠️")
     if st.session_state.get("quiz_result"):

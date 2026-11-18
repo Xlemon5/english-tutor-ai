@@ -322,3 +322,31 @@ def test_choice_options_are_shuffled_by_code(retriever):
         assert sorted(q.options) == sorted(MC["options"]) and q.answer == "works"
         positions.add(q.options.index("works"))
     assert positions == {0, 1, 2}  # верный ответ бывает на любой позиции
+
+
+TOPICS_YAML = """
+grammar:
+  - {id: a1-present-simple, level: A1, title: "Present Simple", match: ['present simple', 'simple present']}
+  - {id: a1-articles, level: A1, title: "Артикли a/an/the", match: ['\\barticles?\\b', 'артикл']}
+writing:
+  - {id: b1-third-person, level: B1, title: "Третье лицо", match: ['third person singular']}
+"""
+
+
+def test_topic_is_matched_by_title_pattern_or_close_spelling(tmp_path):
+    from tutor.agent.topics import match_topic
+
+    (tmp_path / "topics.yaml").write_text(TOPICS_YAML)
+    assert match_topic("Present Simple", tmp_path)["id"] == "a1-present-simple"
+    assert match_topic("Articles", tmp_path)["id"] == "a1-articles"
+    assert match_topic("Pressent Simpel", tmp_path)["id"] == "a1-present-simple"  # опечатка
+    assert match_topic("фыва олдж 12345", tmp_path) is None
+
+
+def test_writing_topic_above_level_limits_types_and_warns(retriever):
+    writing_only = "writing:\n  - {id: b1-third-person, level: B1, title: Третье лицо, match: ['third person singular']}\n"
+    (retriever.settings.materials_dir / "topics.yaml").write_text(writing_only)
+    llm = FakeListChatModel(responses=[json.dumps({"questions": [MC, FIX]})])
+    quiz = QuizAgent(retriever, StructuredCaller(lambda schema, **_: llm, retries=0)).generate(TOPIC, "A1", 2, seed=1)
+    assert {q.type for q in quiz.questions} <= {"multiple_choice", "error_correction"}
+    assert "B1" in quiz.message and "письму" in quiz.message
