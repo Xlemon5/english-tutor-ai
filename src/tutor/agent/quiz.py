@@ -10,10 +10,10 @@ from typing import Literal
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from tutor.agent.theory import NO_MATERIAL_TEXT, format_context, suggest_topics
+from tutor.agent.theory import FRAGMENT_CHARS, NO_MATERIAL_TEXT, format_context, suggest_topics
 from tutor.lexicon import load_vocab, words_above_level
 from tutor.llm.language import FOREIGN_SCRIPT_ERROR, has_foreign_script
-from tutor.llm.structured import StructuredCaller, StructuredOutputError
+from tutor.llm.structured import ContextBudgetError, StructuredCaller, StructuredOutputError, estimate_tokens
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
 from tutor.retrieval.hybrid import Retriever
@@ -27,6 +27,8 @@ MAX_ROUNDS = 5
 MAX_HARD_WORDS = 1  # сколько слов выше уровня допускается в одном задании
 REPEAT_TEMPERATURE_STEP = 0.15  # на сколько поднять температуру, если модель повторила ответ прошлого раунда
 MAX_TEMPERATURE = 1.0
+MAX_AVOID = 10  # сколько уже принятых заданий перечислять в «не повторяй»
+MIN_FRAGMENT_CHARS = 400
 
 # Символы, которые модель может писать в строках теста: латиница, кириллица, цифры, пунктуация, русская
 # типографика и неразрывный пробел, транскрипция (IPA есть в 31 файле материалов и в объяснениях) и знаки,
@@ -240,7 +242,6 @@ class QuizAgent:
         grounded_prompt = self.use_fragments and bool(citations)
         system = load_prompt("quiz_system" if grounded_prompt else "quiz_scratch_system")
         user_template = load_prompt("quiz_user" if grounded_prompt else "quiz_scratch_user")
-        context = format_context(citations) if grounded_prompt else ""
         examples = example_keys(system)
         vocab = load_vocab(str(self.retriever.settings.materials_dir))
 
@@ -261,19 +262,22 @@ class QuizAgent:
                 break
             avoid = ""
             if accepted:
-                avoid = "Не повторяй эти задания:\n" + "\n".join(f"- {q.prompt}" for q in accepted) + "\n"
+                avoid = ("Не повторяй эти задания:\n"
+                         + "\n".join(f"- {q.prompt}" for q in accepted[-MAX_AVOID:]) + "\n")
             if rejected:
                 # без этого при температуре 0 модель на тот же запрос вернёт те же ошибки
                 avoid += ("Прошлые задания отклонены, исправь ошибки:\n"
                           + "\n".join(f"- {r}" for r in dict.fromkeys(rejected)) + "\n")
                 rejected.clear()
-            user = user_template.format(
-                topic=topic, level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid, context=context)
+            user = self._fit_prompt(system, user_template, citations if grounded_prompt else [], topic=topic,
+                                    level=level, plan="\n".join(f"- {t}" for t in missing), avoid=avoid)
             try:
                 options = {"seed": base_seed + round_no}
                 if repeats:  # тот же ответ уже был: одного нового seed не хватило — выбираем свободнее
                     options["temperature"] = min(MAX_TEMPERATURE, self.temperature + REPEAT_TEMPERATURE_STEP * repeats)
                 raw = self.structured(LLMQuiz, system, user, **options)
+            except ContextBudgetError:
+                raise  # не поместилось даже сокращённое — повторять бессмысленно
             except StructuredOutputError as e:
                 logger.warning("генерация теста: {}", e)
                 continue
@@ -321,6 +325,27 @@ class QuizAgent:
         if not questions:
             raise StructuredOutputError("Не удалось составить ни одного корректного вопроса.")
         return Quiz(id=quiz_id, topic=topic, level=level, grounded=bool(citations), questions=questions)
+
+    def _fit_prompt(self, system: str, template: str, citations: list[Citation], **fields: str) -> str:
+        """Промпт раунда. Если вместе с максимальным ответом он не помещается в окно, сначала укорачиваются
+        фрагменты, потом их становится меньше; не помогло — StructuredCaller откажет с понятной ошибкой."""
+        s = self.retriever.settings
+        chars, k = FRAGMENT_CHARS, len(citations)
+
+        def render() -> str:
+            return template.format(**fields, context=format_context(citations[:k], chars) if k else "")
+
+        user = render()
+        while k and estimate_tokens(system, user) + s.quiz_max_tokens > s.llm_num_ctx:
+            if chars > MIN_FRAGMENT_CHARS:
+                chars = max(MIN_FRAGMENT_CHARS, int(chars * 0.7))
+            elif k > 1:
+                k -= 1
+            else:
+                break
+            user = render()
+            logger.info("промпт теста не помещается в окно: фрагментов {} по {} символов", k, chars)
+        return user
 
     def check(self, quiz: Quiz, answers: dict[int, str]) -> QuizResult:
         results = []

@@ -233,3 +233,54 @@ def test_repeated_response_raises_temperature_for_next_round(retriever):
     agent.generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
     assert "temperature" not in options[0] and "temperature" not in options[1]
     assert options[2]["temperature"] == pytest.approx(0.85)  # второй раунд повторил первый
+
+
+class _Reply:
+    def __init__(self, content, meta=None, num_ctx=None, num_predict=None, log=None):
+        self.content, self.response_metadata = content, meta or {}
+        self.num_ctx, self.num_predict, self.log = num_ctx, num_predict, log
+
+    def invoke(self, messages):
+        self.log.append(messages)
+        return self
+
+
+def test_structured_caller_checks_window_before_the_call():
+    from tutor.agent.quiz import LLMQuiz
+    from tutor.llm.structured import ContextBudgetError
+
+    log = []
+    llm = _Reply("{}", num_ctx=1000, num_predict=900, log=log)
+    with pytest.raises(ContextBudgetError):
+        StructuredCaller(lambda schema, **_: llm)(LLMQuiz, "system", "x" * 600)
+    assert log == []  # модель не вызывалась
+
+
+def test_answer_cut_by_length_is_an_error_not_a_result():
+    from tutor.agent.quiz import LLMQuiz
+
+    log = []
+    replies = iter([_Reply('{"questions": []}', {"done_reason": "length"}, log=log),
+                    _Reply('{"questions": []}', {"done_reason": "stop"}, log=log)])
+
+    class Model:  # отдаёт ответы по очереди
+        def invoke(self, messages):
+            return next(replies).invoke(messages)
+
+    result = StructuredCaller(lambda schema, **_: Model(), retries=1)(LLMQuiz, "system", "user")
+    assert result.questions == [] and len(log) == 2
+    assert "лимите длины" in log[1][-1].content  # второй вызов знает, что первый оборвался
+
+
+def test_quiz_prompt_shrinks_fragments_to_fit_the_window(retriever):
+    sent = []
+    llm = FakeListChatModel(responses=[json.dumps({"questions": [MC]})])
+    caller = StructuredCaller(lambda schema, **_: llm, retries=0)
+
+    def spy(schema, system, user, **options):
+        sent.append(user)
+        return caller(schema, system, user, **options)
+
+    retriever.settings.llm_num_ctx = retriever.settings.quiz_max_tokens + 1  # места под фрагменты нет совсем
+    QuizAgent(retriever, spy).generate(TOPIC, "A1", 1, ["multiple_choice"], seed=1)
+    assert "[1]" in sent[0] and "[2]" not in sent[0]  # остался один фрагмент

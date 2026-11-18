@@ -19,6 +19,30 @@ class StructuredOutputError(RuntimeError):
     """Модель не смогла вернуть валидный JSON за отведённое число попыток."""
 
 
+# Бюджет окна. Если промпт плюс максимальный ответ не помещаются в num_ctx, Ollama не падает: во время генерации
+# она сдвигает контекст и выбрасывает его начало — системный промпт (n_keep = 4). Ответ придёт, но уже без
+# инструкций. Поэтому длину проверяем до вызова. Точно посчитать токены заранее нельзя (в Ollama 0.40 нет
+# /api/tokenize), оценка — по символам с запасом: на промптах проекта ~3,7 символа на токен (5674 → 1541 по
+# счётчику Ollama), берём 3,0, то есть оценка завышена примерно на 20 %.
+CHARS_PER_TOKEN = 3.0
+MESSAGE_OVERHEAD_TOKENS = 8  # разметка шаблона чата: <|im_start|>роль … <|im_end|>
+
+
+class ContextBudgetError(StructuredOutputError):
+    """Промпт вместе с максимальной длиной ответа не помещается в окно модели."""
+
+
+def estimate_tokens(*texts: str) -> int:
+    return sum(int(len(t) / CHARS_PER_TOKEN) + MESSAGE_OVERHEAD_TOKENS for t in texts)
+
+
+def check_budget(prompt_tokens: int, num_predict: int | None, num_ctx: int | None) -> None:
+    if num_ctx and num_predict and prompt_tokens + num_predict > num_ctx:
+        raise ContextBudgetError(
+            f"Запрос не помещается в окно модели: ~{prompt_tokens} токенов промпта и до {num_predict} на ответ "
+            f"при окне {num_ctx}.")
+
+
 def extract_json(text: str) -> str:
     """Достаёт JSON-объект из ответа: модели иногда оборачивают его в ```json или добавляют пояснения."""
     start, end = text.find("{"), text.rfind("}")
@@ -67,11 +91,20 @@ class StructuredCaller:
         messages = [SystemMessage(system), HumanMessage(user)]
         last_error = ""
         for attempt in range(self.retries + 1):
+            check_budget(estimate_tokens(*(str(m.content) for m in messages)),
+                         getattr(llm, "num_predict", None), getattr(llm, "num_ctx", None))
             start = time.time()
             response = llm.invoke(messages)  # type: ignore[attr-defined]
             if self.debug_dir is not None:
                 dump_llm_call(self.debug_dir, llm, messages, response, time.time() - start)
             raw = response.content
+            meta = getattr(response, "response_metadata", None) or {}
+            if meta.get("done_reason") == "length":  # ответ оборван лимитом длины — это ошибка, не ответ
+                last_error = f"ответ оборвался на лимите длины ({meta.get('eval_count')} токенов)"
+                logger.warning("LLM: {} (попытка {})", last_error, attempt + 1)
+                messages = [*messages, HumanMessage(
+                    "Ответ оборвался на лимите длины. Верни тот же JSON короче: объяснения — одно предложение.")]
+                continue
             try:
                 return schema.model_validate(json.loads(extract_json(raw)))
             except (json.JSONDecodeError, ValidationError) as e:

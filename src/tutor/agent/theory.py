@@ -5,12 +5,12 @@ import re
 from collections.abc import Iterator
 from typing import Literal
 
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from tutor.llm.language import FOREIGN_SCRIPT, LANGUAGE_RULE
+from tutor.llm.structured import ContextBudgetError, estimate_tokens
 from tutor.prompts import load_prompt
 from tutor.retrieval.citations import Citation, build_citations
 from tutor.retrieval.hybrid import Retriever, SearchResult
@@ -20,6 +20,7 @@ NO_ANSWER = "NO_ANSWER"
 _MARK = re.compile(r"\[(\d+)\]")
 FRAGMENT_CHARS = 1000
 MAX_RESUMES = 2  # сколько раз продолжать ответ после перехода модели на китайский
+TRUNCATED_NOTE = "\n\n(Ответ оборвался: модель упёрлась в лимит длины. Задайте вопрос уже.)"
 
 
 class TheoryAnswer(BaseModel):
@@ -86,10 +87,10 @@ class TheoryAgent:
         (по умолчанию та же; в сервисах — с небольшой температурой, чтобы не повторить тот же сбой)."""
         self.retriever = retriever
         messages = [("system", "{system}"), ("human", load_prompt("theory_user"))]
-        self.chain = ChatPromptTemplate.from_messages(messages) | llm | StrOutputParser()
+        # без StrOutputParser: по последнему куску видно done_reason (обрыв по лимиту длины)
+        self.chain = ChatPromptTemplate.from_messages(messages) | llm
         # последнее сообщение — начало ответа ассистента: модель продолжает его, а не начинает заново
-        self.resume_chain = (ChatPromptTemplate.from_messages([*messages, ("ai", "{prefix}")])
-                             | (resume_llm or llm) | StrOutputParser())
+        self.resume_chain = ChatPromptTemplate.from_messages([*messages, ("ai", "{prefix}")]) | (resume_llm or llm)
 
     def _pieces(self, inputs: dict) -> Iterator[str]:
         """Текст ответа модели по кускам, без иероглифов. Если модель перешла на китайский, генерация
@@ -105,7 +106,11 @@ class TheoryAgent:
             dangling = text[len(text.rstrip()):]  # пробел в конце уже показан — второй не нужен
             tail = ""  # недописанное слово держим, пока не ясно, что за ним не иероглифы
             switched = None
-            for piece in source:
+            truncated = False
+            for chunk in source:
+                piece = chunk.content if hasattr(chunk, "content") else str(chunk)
+                meta = getattr(chunk, "response_metadata", None) or {}
+                truncated = truncated or meta.get("done_reason") == "length"
                 if dangling and piece:
                     piece, dangling = piece.lstrip(" "), ""
                 tail += piece
@@ -120,6 +125,9 @@ class TheoryAgent:
             if switched is None:
                 if tail:
                     yield tail
+                if truncated:  # лимит длины — не нормальный конец ответа, говорим об этом прямо
+                    logger.warning("ответ по теории оборвался на лимите длины")
+                    yield TRUNCATED_NOTE
                 return
             source.close()  # обрываем генерацию: дальше модель продолжила бы по-китайски
             logger.warning("ответ перешёл на китайский после «{}» (сбой {} из {})",
@@ -142,8 +150,16 @@ class TheoryAgent:
             yield TheoryEvent(type="final", result=self._refuse(result, True))
             return
         citations = build_citations(result.hits)
-        context = format_context(citations, self.retriever.settings.context_fragment_chars)
-        stream = self._pieces({"system": load_prompt("theory_system"), "context": context, "question": question})
+        s = self.retriever.settings
+        system, template = load_prompt("theory_system"), load_prompt("theory_user")
+        context = format_context(citations, s.context_fragment_chars)
+        # окно: промпт плюс максимальный ответ должны поместиться до вызова; лишние фрагменты отбрасываются
+        while len(citations) > 1 and estimate_tokens(system, template, context, question) + s.llm_max_tokens > s.llm_num_ctx:
+            citations = citations[:-1]
+            context = format_context(citations, s.context_fragment_chars)
+        if estimate_tokens(system, template, context, question) + s.llm_max_tokens > s.llm_num_ctx:
+            raise ContextBudgetError("Вопрос вместе с материалами не помещается в окно модели — сократите вопрос.")
+        stream = self._pieces({"system": system, "context": context, "question": question})
         text, emitted = "", 0
         hold = len(NO_ANSWER) + 2  # не показываем начало ответа, пока не ясно, что это не отказ
         for piece in stream:

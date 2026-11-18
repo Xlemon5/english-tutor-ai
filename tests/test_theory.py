@@ -85,3 +85,28 @@ def test_answer_stops_at_last_clean_place_if_model_never_recovers(retriever):
     llm = FakeListChatModel(responses=["Окончание -s добав形成", "形成的", "继续"])
     result = TheoryAgent(retriever, llm).answer("third person singular ending -s or -es")
     assert result.answer == "Окончание -s добав" and result.status == "answered"
+
+
+def test_theory_marks_answer_cut_by_length(retriever):
+    from langchain_core.outputs import ChatGenerationChunk
+
+    from tutor.agent.theory import TRUNCATED_NOTE
+
+    class CutModel(FakeListChatModel):
+        def _stream(self, *args, **kwargs):
+            chunks = list(super()._stream(*args, **kwargs))
+            chunks[-1] = ChatGenerationChunk(message=chunks[-1].message.model_copy(
+                update={"response_metadata": {"done_reason": "length"}}))
+            yield from chunks
+
+    result = TheoryAgent(retriever, CutModel(responses=["Окончание -s добавляется в третьем лице [1]"])).answer(
+        "third person singular ending -s or -es")
+    assert result.answer.endswith(TRUNCATED_NOTE.strip()) or TRUNCATED_NOTE.strip() in result.answer
+
+
+def test_theory_refuses_question_that_does_not_fit_the_window(retriever):
+    from tutor.llm.structured import ContextBudgetError
+
+    retriever.settings.llm_num_ctx = 100
+    with pytest.raises(ContextBudgetError):
+        TheoryAgent(retriever, ExplodingLLM(responses=["x"])).answer("third person singular ending -s or -es")
