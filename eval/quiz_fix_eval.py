@@ -202,12 +202,19 @@ def run(args) -> None:
     seed_supported = "seed" in inspect.signature(agent.generate).parameters
     OUT.mkdir(parents=True, exist_ok=True)
     out = OUT / f"{args.label}.jsonl"
-    out.write_text("")
+    done_keys = set()
+    if args.resume and out.exists():  # продолжить прерванный прогон: готовые ячейки не пересчитываются
+        done_keys = {(r["topic"], r["level"], r["seed"]) for r in map(json.loads, out.read_text().splitlines())}
+    else:
+        out.write_text("")
     total, done = len(cells) * len(SEEDS), 0
     print(f"Прогон {args.label}: {total} генераций, seed передаётся: {seed_supported}, "
           f"фрагменты в промпте: {agent.use_fragments}, окно {settings.llm_num_ctx}", flush=True)
     for kind, topic, level in cells:
         for seed in SEEDS:
+            if (topic, level, seed) in done_keys:
+                done += 1
+                continue
             calls.clear()
             funnel.clear()
             start = time.time()
@@ -395,6 +402,7 @@ def main() -> None:
     ap.add_argument("--calibrate-judge", action="store_true")
     ap.add_argument("--calibrate-solver", action="store_true")
     ap.add_argument("--table", nargs="*")
+    ap.add_argument("--resume", action="store_true", help="дописать недостающие ячейки в существующий файл")
     args = ap.parse_args()
     if args.table:
         table(args.table)
