@@ -52,7 +52,9 @@ class Settings(BaseSettings):
     lexical_weight: float = 0.5
     relevance_threshold: float = 0.55
     # тесты: True — фрагменты материалов идут в промпт, False — модель составляет предложения сама
-    quiz_use_fragments: bool = True
+    # по умолчанию — без фрагментов: качество вопросов то же (~48% без замечаний на 82 размеченных вопросах),
+    # но тест в 2,2 раза быстрее и чаще полный (6 из 9 тем против 4); поиск всё равно проверяет тему и даёт ссылку
+    quiz_use_fragments: bool = False
 
     # Авторизация: при AUTH_ENABLED=false все запросы идут от пользователя «local»
     auth_enabled: bool = True
