@@ -301,6 +301,9 @@ def summarize(path: Path, num_ctx: int) -> dict:
 def fmt(s: dict) -> str:
     if not isinstance(s, dict):
         return str(s)
+    if "n" not in s:  # распределение позиций ответа: {"A": 3, "B": 7, ...}
+        total = sum(s.values())
+        return ", ".join(f"{k} {100 * v / total:.0f}%" for k, v in s.items()) + f" (n={total})" if total else "—"
     if s["n"] == 0:
         return "—"
     if s["k"] == 0:
