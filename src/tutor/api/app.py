@@ -73,6 +73,11 @@ def user_message(e: Exception) -> str:
     return str(e)
 
 
+def public_quiz(quiz: Quiz) -> dict:
+    """Тест для ученика: без правильных ответов и объяснений — они приходят только после проверки."""
+    return quiz.model_dump(exclude={"questions": {"__all__": {"answer", "explanation"}}})
+
+
 def create_app(services: Services | None = None, storage: Storage | None = None) -> FastAPI:
     app = FastAPI(title="English Tutor API", version="0.1.0")
 
@@ -170,7 +175,7 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
                     quiz = svc().quiz.generate(r.topic or body.message, r.level or level or "A2", r.count or 5)
                     if quiz.status == "ready":
                         db().add_quiz(user, quiz.model_dump())
-                    payload = {"kind": "quiz", **quiz.model_dump()}
+                    payload = {"kind": "quiz", **public_quiz(quiz)}
                 else:
                     payload = {}
                     for event in svc().theory.stream(body.message, level):
@@ -234,8 +239,8 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
         except StructuredOutputError as e:
             raise HTTPException(502, user_message(e)) from e
         if quiz.status == "ready":
-            db().add_quiz(user, quiz.model_dump())
-        return quiz.model_dump()
+            db().add_quiz(user, quiz.model_dump())  # в базе — целиком, ответы нужны для проверки
+        return public_quiz(quiz)
 
     @app.post("/api/quiz/{quiz_id}/check")
     def quiz_check(quiz_id: str, body: QuizAnswers, user: str = Depends(current_user)) -> dict:

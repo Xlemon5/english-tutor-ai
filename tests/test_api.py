@@ -196,3 +196,13 @@ def test_model_down_and_bad_json_give_clear_messages(settings, embedder, store, 
     monkeypatch.setattr(Retriever, "search", down)
     r = client.post("/api/quiz/generate", headers=headers, json={"topic": TOPIC, "level": "A1"})
     assert r.status_code == 503 and r.json()["detail"] == MODEL_DOWN
+
+
+def test_generated_quiz_does_not_reveal_answers(settings, embedder, store, tmp_path):
+    client = make_client(settings, embedder, store, tmp_path, structured=[QUIZ])
+    headers = login(client)
+    quiz = client.post("/api/quiz/generate", headers=headers, json={
+        "topic": TOPIC, "level": "A1", "count": 1, "types": ["multiple_choice"]}).json()
+    assert "answer" not in quiz["questions"][0] and "explanation" not in quiz["questions"][0]
+    result = client.post(f"/api/quiz/{quiz['id']}/check", json={"answers": {"1": "works"}}, headers=headers).json()
+    assert result["score"] == 1 and result["results"][0]["question"]["answer"] == "works"  # после проверки — есть
