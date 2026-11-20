@@ -4,7 +4,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
-data/
+# только корневой каталог данных (индекс, база пользователей, журналы);
+# materials/web/cefr-j/data — исходные таблицы CEFR-J, они нужны в репозитории
+/data/
 materials/.raw/
 node_modules/
 .DS_Store

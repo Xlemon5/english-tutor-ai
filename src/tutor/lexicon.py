@@ -12,20 +12,63 @@ _SUFFIXES = (("ies", ("y",)), ("es", ("",)), ("s", ("",)), ("ied", ("y",)), ("ed
              ("ing", ("", "e")), ("er", ("", "e")), ("est", ("", "e")), ("ly", ("",)))
 
 
+LIST_FILES = ("web/cefr-j/vocabulary-a1.md", "web/cefr-j/vocabulary-a2.md", "web/cefr-j/vocabulary-b1.md")
+_SECTION = re.compile(r"^## (A1|A2|B1): (.+)$")
+
+
+def _rows(materials: Path):
+    """(слово, уровень, часть речи) из таблицы CEFR-J; если её нет — из списков vocabulary-*.md.
+    Таблица лежит в каталоге data/, который не попадает в git, а списки в репозитории есть."""
+    path = materials / VOCAB_FILE
+    if path.exists():
+        with path.open(encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                yield row["headword"], row["CEFR"], row["pos"]
+        return
+    for name in LIST_FILES:
+        list_path = materials / name
+        if not list_path.exists():
+            continue
+        level = pos = ""
+        for line in list_path.read_text("utf-8").splitlines():
+            if m := _SECTION.match(line):
+                level, pos = m.groups()
+            elif level and line.strip() and not line.startswith(("#", "---")):
+                for headword in line.split(", "):
+                    yield headword, level, pos
+
+
+@lru_cache
+def load_entries(materials_dir: str) -> dict[str, list[tuple[str, str]]]:
+    """слово → [(уровень, часть речи), …] по возрастанию уровня."""
+    entries: dict[str, list[tuple[str, str]]] = {}
+    for headword, level, pos in _rows(Path(materials_dir)):
+        if level not in RANK:
+            continue
+        for word in headword.lower().split("/"):
+            word = word.strip()
+            if word and (level, pos) not in entries.setdefault(word, []):
+                entries[word].append((level, pos))
+    for found in entries.values():
+        found.sort(key=lambda e: RANK[e[0]])
+    return entries
+
+
 @lru_cache
 def load_vocab(materials_dir: str) -> dict[str, int]:
-    path = Path(materials_dir) / VOCAB_FILE
-    vocab: dict[str, int] = {}
-    if not path.exists():
-        return vocab
-    with path.open(encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            rank = RANK.get(row["CEFR"])
-            for word in row["headword"].lower().split("/"):
-                word = word.strip()
-                if rank and word and rank < vocab.get(word, 9):
-                    vocab[word] = rank
-    return vocab
+    return {word: RANK[found[0][0]] for word, found in load_entries(materials_dir).items()}
+
+
+def word_levels(word: str, materials_dir: str) -> list[tuple[str, str]]:
+    """Уровни слова (или словосочетания) по CEFR-J; для форм вроде cats, went → по исходной форме."""
+    entries = load_entries(materials_dir)
+    word = word.lower().strip()
+    if word in entries:
+        return entries[word]
+    for form in _forms(word):
+        if form in entries:
+            return entries[form]
+    return []
 
 
 def _forms(word: str):
