@@ -190,6 +190,14 @@ def render_assistant(payload: dict, key: str) -> None:
                 citation_popover(c, f"{key}-c{c['n']}")
         else:
             st.caption(f"Текст составлен моделью для уровня {payload['level']}; похожего образца в материалах нет.")
+    elif kind == "translate":
+        st.markdown(payload["answer"])
+        if payload.get("levels"):
+            levels = "; ".join(f"{w['word']} — {w['level']}" + (f" ({w['pos']})" if w.get("pos") else "")
+                               for w in payload["levels"])
+            st.caption(f"Перевод сделан моделью. Уровень слова по списку CEFR-J из библиотеки: {levels}.")
+        else:
+            st.caption("Перевод сделан моделью; в списках слов CEFR-J из библиотеки этого слова нет.")
     elif kind == "review":
         show_review(payload, key)
     elif kind == "plan":
@@ -211,7 +219,8 @@ def render_assistant(payload: dict, key: str) -> None:
 
 def page_chat() -> None:
     st.title("Чат с репетитором")
-    st.caption("Вопросы по теории — с ответами по материалам и ссылками. Можно прислать текст на проверку, "
+    st.caption("Вопросы по теории — с ответами по материалам и ссылками. Можно попросить перевод («Как будет "
+               "кошка по-английски?»), прислать текст на проверку, "
                "попросить тест («Сделай тест по Past Simple, A2»), пример текста («Напиши короткий текст про "
                "выходные») или программу обучения («Программа до A2»).")
     if "chat" not in st.session_state:
@@ -231,7 +240,7 @@ def page_chat() -> None:
                 st.markdown(m["content"])
             else:
                 render_assistant(m.get("payload") or {"answer": m["content"]}, f"m{i}")
-    message = st.chat_input("Спросите о правиле, пришлите текст или попросите тест")
+    message = st.chat_input("Спросите о правиле, попросите перевод, пришлите текст или попросите тест")
     if not message:
         return
     st.session_state["chat"].append({"role": "user", "content": message})

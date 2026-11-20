@@ -14,14 +14,20 @@ from pydantic import BaseModel, Field
 
 from tutor.agent.plan import build_plan, plan_summary
 from tutor.agent.quiz import TYPE_RU, Quiz
-from tutor.agent.router import route
+from tutor.agent.router import plan_fallback, route, smalltalk_kind
 from tutor.llm.structured import ContextBudgetError, StructuredOutputError
 from tutor.models import LEVELS
 from tutor.services import Services, get_services
 from tutor.storage import Storage
 
-SMALLTALK = ("Здравствуйте! Я репетитор по английскому. Задайте вопрос по грамматике или лексике, "
-             "пришлите текст на проверку, попросите тест по теме или программу обучения до нужного уровня.")
+CAPABILITIES = ("Задайте вопрос по грамматике или лексике, попросите перевести слово или фразу, пришлите текст "
+                "на проверку, попросите тест по теме, пример текста или программу обучения до нужного уровня.")
+SMALLTALK = {
+    "greeting": "Здравствуйте! Я репетитор по английскому. " + CAPABILITIES,
+    "thanks": "Пожалуйста! Если появятся вопросы — пишите. " + CAPABILITIES,
+    "bye": "До встречи! Возвращайтесь, когда захотите продолжить.",
+}
+PLAN_INSTEAD = "Готового ответа на этот вопрос в материалах нет, но вот программа по уровню — темы, которые в библиотеке есть.\n\n"
 
 
 class Credentials(BaseModel):
@@ -163,7 +169,7 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
             yield sse("intent", {"intent": r.intent})
             try:
                 if r.intent == "smalltalk":
-                    payload = {"kind": "smalltalk", "answer": SMALLTALK}
+                    payload = {"kind": "smalltalk", "answer": SMALLTALK[smalltalk_kind(body.message)]}
                 elif r.intent == "plan":
                     plan = build_plan(svc().settings.materials_dir, r.level or level, r.start_level)
                     payload = {"kind": "plan", "answer": plan_summary(plan), **plan.model_dump()}
@@ -178,6 +184,13 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
                             yield sse("token", {"text": event.text})
                         else:
                             payload = {"kind": "compose", **event.result.model_dump()}
+                elif r.intent == "translate":
+                    payload = {}
+                    for event in svc().translate.stream(body.message):
+                        if event.type == "token":
+                            yield sse("token", {"text": event.text})
+                        else:
+                            payload = {"kind": "translate", **event.result.model_dump()}
                 elif r.intent == "quiz":
                     quiz = svc().quiz.generate(r.topic or body.message, r.level or level or "A2", r.count or 5)
                     if quiz.status == "ready":
@@ -190,6 +203,10 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
                             yield sse("token", {"text": event.text})
                         else:
                             payload = {"kind": "theory", **event.result.model_dump()}
+                    # страховка: вопрос об уровне, который роутер не узнал, — программа вместо отказа
+                    if payload.get("status") == "no_material" and (fallback := plan_fallback(body.message)):
+                        plan = build_plan(svc().settings.materials_dir, fallback.level or level, fallback.start_level)
+                        payload = {"kind": "plan", "answer": PLAN_INSTEAD + plan_summary(plan), **plan.model_dump()}
             except (StructuredOutputError, ValueError) as e:
                 yield sse("error", {"message": user_message(e)})
                 return

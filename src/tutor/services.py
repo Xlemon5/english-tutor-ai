@@ -8,6 +8,7 @@ from tutor.agent.compose import ComposeAgent
 from tutor.agent.quiz import QuizAgent
 from tutor.agent.review import ReviewAgent
 from tutor.agent.theory import TheoryAgent
+from tutor.agent.translate import TranslateAgent
 from tutor.config import Settings, get_settings
 from tutor.llm.base import get_chat_model, get_embedder
 from tutor.llm.structured import StructuredCaller
@@ -26,6 +27,7 @@ class Services:
     compose: ComposeAgent
     review: ReviewAgent
     quiz: QuizAgent
+    translate: TranslateAgent
 
 
 def build_services(settings: Settings) -> Services:
@@ -54,6 +56,10 @@ def build_services(settings: Settings) -> Services:
         compose=ComposeAgent(retriever, get_chat_model(settings, temperature=settings.compose_temperature,
                                                        top_p=settings.quiz_top_p, top_k=settings.quiz_top_k),
                              can_resume=settings.llm_provider.lower() == "ollama"),
+        # перевод — детерминированно (T=0), как ответы по теории
+        translate=TranslateAgent(retriever, get_chat_model(settings),
+                                 resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE),
+                                 can_resume=settings.llm_provider.lower() == "ollama"),
         review=ReviewAgent(retriever, structured),
         quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured,
                        temperature=settings.quiz_temperature),

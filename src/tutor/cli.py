@@ -96,6 +96,21 @@ def ask(question: str, level: str = typer.Option("", "--level", help="A1, A2 и�
 
 
 @app.command()
+def translate(text: str) -> None:
+    """Перевести слово, фразу или предложение (русский ↔ английский); уровень слова — по CEFR-J."""
+    from tutor.services import get_services
+
+    for event in get_services().translate.stream(text):
+        if event.type == "token":
+            typer.echo(event.text, nl=False)
+        elif event.result.levels:
+            levels = "; ".join(f"{w.word} — {w.level} ({w.pos})" for w in event.result.levels)
+            typer.echo(f"\n\nУровень по CEFR-J: {levels}")
+        else:
+            typer.echo()
+
+
+@app.command()
 def review(
     text: str = typer.Argument("", help="Текст работы (или --file)."),
     file: str = typer.Option("", "--file", help="Файл с текстом работы."),

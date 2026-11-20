@@ -11,6 +11,7 @@ from tutor.agent.quiz import QuizAgent
 from tutor.agent.review import ReviewAgent
 from tutor.agent.router import route
 from tutor.agent.theory import TheoryAgent
+from tutor.agent.translate import TranslateAgent
 from tutor.api.app import create_app
 from tutor.ingestion.indexer import ingest
 from tutor.llm.structured import StructuredCaller
@@ -31,6 +32,7 @@ TOPIC = "present simple third person singular ending -s"
 
 def make_client(settings, embedder, store, tmp_path, *, theory="Окончание -s нужно после he и she [1].",
                 compose="My brother works in a shop.\n\nГрамматика: Present Simple — *works*.",
+                translate="**cat** — кошка, кот (существительное)\n\nПримеры:\n- I have a cat. — У меня есть кошка.",
                 structured=()) -> TestClient:
     ingest(settings, embedder, store)
     retriever = Retriever(store, embedder, settings)
@@ -39,7 +41,8 @@ def make_client(settings, embedder, store, tmp_path, *, theory="Окончани
     services = Services(settings=settings, store=store, retriever=retriever,
                         theory=TheoryAgent(retriever, FakeListChatModel(responses=[theory])),
                         compose=ComposeAgent(retriever, FakeListChatModel(responses=[compose])),
-                        review=ReviewAgent(retriever, caller), quiz=QuizAgent(retriever, caller))
+                        review=ReviewAgent(retriever, caller), quiz=QuizAgent(retriever, caller),
+                        translate=TranslateAgent(retriever, FakeListChatModel(responses=[translate])))
     return TestClient(create_app(services, Storage(tmp_path / "api.db")))
 
 
@@ -183,6 +186,13 @@ def test_router_plan_intent():
     assert route("С чего мне начать изучение английского?").intent == "plan"
     assert route("Сделай тест по Past Simple, A2").intent == "quiz"
     assert route("Когда используется Present Perfect?").intent == "theory"
+    # живой случай 20.11: «изучить» не входило в список глаголов, вопрос ушёл в теорию и получил отказ
+    r = route("что мне нужно изучить для получения уровня A1")
+    assert (r.intent, r.level) == ("plan", "A1")
+    for text in ("что надо знать для уровня A2", "какие темы нужны для B1", "Какую грамматику нужно знать на A1?"):
+        assert route(text).intent == "plan", text
+    assert route("что нужно знать о Present Perfect для B1").intent == "theory"
+    assert route("Сделай тест: что нужно знать для A1").intent == "quiz"
 
 
 def test_model_down_and_bad_json_give_clear_messages(settings, embedder, store, tmp_path, monkeypatch):
@@ -234,3 +244,25 @@ def test_chat_composes_text(settings, embedder, store, tmp_path):
     final = events[-1][1]
     assert final["kind"] == "compose" and final["level"] == "A1"
     assert final["answer"].startswith("My brother works in a shop.")
+
+
+def test_chat_shows_plan_instead_of_refusal(settings, embedder, store, tmp_path):
+    client = make_client(settings, embedder, store, tmp_path)
+    headers = login(client)
+    events = sse_events(client.post("/api/chat", json={"message": "расскажи про уровень A1"}, headers=headers))
+    assert events[0] == ("intent", {"intent": "theory"})
+    final = events[-1][1]
+    assert final["kind"] == "plan" and final["target_level"] == "A1"
+    assert final["answer"].startswith("Готового ответа на этот вопрос в материалах нет")
+    reply = sse_events(client.post("/api/chat", json={"message": "спасибо!"}, headers=headers))[-1][1]
+    assert reply["kind"] == "smalltalk" and reply["answer"].startswith("Пожалуйста")
+
+
+def test_chat_translates_words(settings, embedder, store, tmp_path):
+    client = make_client(settings, embedder, store, tmp_path)
+    events = sse_events(client.post("/api/chat", json={"message": "как будет кошка по-английски?"},
+                                    headers=login(client)))
+    assert events[0] == ("intent", {"intent": "translate"})
+    assert "".join(d["text"] for name, d in events if name == "token").startswith("**cat**")
+    final = events[-1][1]
+    assert final["kind"] == "translate" and final["answer"].startswith("**cat** — кошка")

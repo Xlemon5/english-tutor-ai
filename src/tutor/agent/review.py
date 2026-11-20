@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from tutor.lexicon import word_levels
 from tutor.llm.language import FOREIGN_SCRIPT_ERROR, TEXT_PATTERN, has_foreign_script
 from tutor.llm.structured import StructuredCaller
 from tutor.prompts import load_prompt
@@ -111,6 +112,21 @@ def split_error(text: str, e: LLMError) -> list[tuple[LLMError, tuple[int, int] 
     return out or [(e, span)]
 
 
+def fix_spelling_type(e: LLMError, materials_dir: str) -> LLMError:
+    """Опечатку модель часто называет грамматикой (frend → friend помечалось «grammar», хотя пример
+    в промпте ровно этот). Если исправляется одно слово, которого нет в словаре CEFR-J ни в какой форме,
+    на похожее известное слово — это орфография. Неверная форма известного слова (goed, writed, childs:
+    у них находится исходная форма go, write, child) остаётся грамматикой."""
+    fragment, correction = e.fragment.strip(), e.correction.strip()
+    if e.type == "spelling" or not re.fullmatch(r"[A-Za-z]{2,}", fragment) or not re.fullmatch(r"[A-Za-z]{2,}", correction):
+        return e
+    if word_levels(fragment, materials_dir) or not word_levels(correction, materials_dir):
+        return e
+    if SequenceMatcher(None, fragment.lower(), correction.lower()).ratio() < 0.6:
+        return e
+    return e.model_copy(update={"type": "spelling"})
+
+
 def grade_for(errors: int, text: str) -> int:
     words = max(len(re.findall(r"[A-Za-z']+", text)), 1)
     per_100 = errors / words * 100
@@ -148,6 +164,7 @@ class ReviewAgent:
             if item.fragment.strip() == item.correction.strip():
                 continue  # модель «исправила» правильное на то же самое — это не ошибка
             for e, span in split_error(text, item):
+                e = fix_spelling_type(e, str(self.retriever.settings.materials_dir))
                 if span and any(span[0] < t[1] and t[0] < span[1] for t in taken):
                     span = locate(text, e.fragment, taken)
                 if span:
