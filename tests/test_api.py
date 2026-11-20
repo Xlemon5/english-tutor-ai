@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
+from tutor.agent.compose import ComposeAgent
 from tutor.agent.quiz import QuizAgent
 from tutor.agent.review import ReviewAgent
 from tutor.agent.router import route
@@ -29,6 +30,7 @@ TOPIC = "present simple third person singular ending -s"
 
 
 def make_client(settings, embedder, store, tmp_path, *, theory="Окончание -s нужно после he и she [1].",
+                compose="My brother works in a shop.\n\nГрамматика: Present Simple — *works*.",
                 structured=()) -> TestClient:
     ingest(settings, embedder, store)
     retriever = Retriever(store, embedder, settings)
@@ -36,6 +38,7 @@ def make_client(settings, embedder, store, tmp_path, *, theory="Окончани
     caller = StructuredCaller(lambda schema, **_: llm, retries=0)
     services = Services(settings=settings, store=store, retriever=retriever,
                         theory=TheoryAgent(retriever, FakeListChatModel(responses=[theory])),
+                        compose=ComposeAgent(retriever, FakeListChatModel(responses=[compose])),
                         review=ReviewAgent(retriever, caller), quiz=QuizAgent(retriever, caller))
     return TestClient(create_app(services, Storage(tmp_path / "api.db")))
 
@@ -206,3 +209,28 @@ def test_generated_quiz_does_not_reveal_answers(settings, embedder, store, tmp_p
     assert "answer" not in quiz["questions"][0] and "explanation" not in quiz["questions"][0]
     result = client.post(f"/api/quiz/{quiz['id']}/check", json={"answers": {"1": "works"}}, headers=headers).json()
     assert result["score"] == 1 and result["results"][0]["question"]["answer"] == "works"  # после проверки — есть
+
+
+def test_router_compose_intent():
+    for text in ("напиши мне короткий текст как я провел выходные, придумай сам что-нибудь про занятия",
+                 "на английском текст напиши мне короткий текст как я провел выходные",
+                 "Составь письмо другу о каникулах", "Придумай рассказ про мою семью, A1",
+                 "Write a short story about my weekend", "напиши 5 предложений в Past Simple"):
+        assert route(text).intent == "compose", text
+    assert route("Придумай рассказ про мою семью, A1").level == "A1"
+    # прежние сценарии не задеты
+    assert route("Сделай тест по Past Simple, A2").intent == "quiz"
+    assert route("составь программу обучения до a2").intent == "plan"
+    assert route("Проверь текст: Yesterday I go to the park with my frend.").intent == "review"
+    assert route("Как написать письмо другу?").intent == "theory"
+
+
+def test_chat_composes_text(settings, embedder, store, tmp_path):
+    client = make_client(settings, embedder, store, tmp_path)
+    headers = login(client)
+    events = sse_events(client.post("/api/chat", json={"message": "Напиши короткий текст про брата, A1"},
+                                    headers=headers))
+    assert events[0] == ("intent", {"intent": "compose"})
+    final = events[-1][1]
+    assert final["kind"] == "compose" and final["level"] == "A1"
+    assert final["answer"].startswith("My brother works in a shop.")

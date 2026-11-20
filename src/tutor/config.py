@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     quiz_top_p: float = 0.8
     quiz_top_k: int = 20
     quiz_repeat_penalty: float = 1.05
-    quiz_max_tokens: int = 1500  # предохранитель: обычный ответ на 4 вопроса — 250–450 токенов
+    quiz_max_tokens: int = 1500
+    # пример текста по просьбе студента: при T=0 на одну и ту же просьбу был бы всегда один и тот же текст
+    compose_temperature: float = 0.7  # предохранитель: обычный ответ на 4 вопроса — 250–450 токенов
     # отладка: каждый вызов LLM в JSON-сценариях (запрос, сырой ответ, токены) пишется в debug_llm_dir
     debug_llm: bool = False
     debug_llm_dir: Path = Path("data/llm_debug")

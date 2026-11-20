@@ -171,6 +171,13 @@ def create_app(services: Services | None = None, storage: Storage | None = None)
                     result = svc().review.review(r.text).model_dump()
                     db().add_review(user, result)
                     payload = {"kind": "review", **result}
+                elif r.intent == "compose":
+                    payload = {}
+                    for event in svc().compose.stream(body.message, r.level or level):
+                        if event.type == "token":
+                            yield sse("token", {"text": event.text})
+                        else:
+                            payload = {"kind": "compose", **event.result.model_dump()}
                 elif r.intent == "quiz":
                     quiz = svc().quiz.generate(r.topic or body.message, r.level or level or "A2", r.count or 5)
                     if quiz.status == "ready":

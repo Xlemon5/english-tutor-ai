@@ -182,6 +182,14 @@ def render_assistant(payload: dict, key: str) -> None:
         else:
             st.markdown(payload["answer"])
             show_citations(payload["citations"], key)
+    elif kind == "compose":
+        st.markdown(payload["answer"])
+        if payload["citations"]:
+            st.caption(f"Текст составлен моделью для уровня {payload['level']}. Образец из материалов:")
+            for c in payload["citations"]:
+                citation_popover(c, f"{key}-c{c['n']}")
+        else:
+            st.caption(f"Текст составлен моделью для уровня {payload['level']}; похожего образца в материалах нет.")
     elif kind == "review":
         show_review(payload, key)
     elif kind == "plan":
@@ -204,7 +212,8 @@ def render_assistant(payload: dict, key: str) -> None:
 def page_chat() -> None:
     st.title("Чат с репетитором")
     st.caption("Вопросы по теории — с ответами по материалам и ссылками. Можно прислать текст на проверку, "
-               "попросить тест («Сделай тест по Past Simple, A2») или программу обучения («Программа до A2»).")
+               "попросить тест («Сделай тест по Past Simple, A2»), пример текста («Напиши короткий текст про "
+               "выходные») или программу обучения («Программа до A2»).")
     if "chat" not in st.session_state:
         try:
             st.session_state["chat"] = api().get("/api/chat/history")

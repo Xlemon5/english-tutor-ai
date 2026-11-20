@@ -1,4 +1,4 @@
-"""Маршрутизация намерений в чате: теория / проверка работы / тест / приветствие.
+"""Маршрутизация намерений в чате: теория / пример текста / проверка работы / тест / приветствие.
 
 Правила вместо отдельного вызова LLM: это мгновенно и предсказуемо. В разделах интерфейса
 сценарий выбран явно, роутер нужен только для свободного чата.
@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-Intent = Literal["theory", "review", "quiz", "plan", "smalltalk"]
+Intent = Literal["theory", "compose", "review", "quiz", "plan", "smalltalk"]
 
 _QUIZ = re.compile(r"\b(тест\w*|квиз\w*|quiz|упражнени\w*|задани[яйе]\w*|потренир\w*|вопрос\w* на)\b", re.IGNORECASE)
 _REVIEW = re.compile(r"(провер[ьи]\w*|исправ[ьи]\w*|найди ошибк\w*|check my|correct my|есть ли ошибк\w*)", re.IGNORECASE)
@@ -19,6 +19,11 @@ _SMALLTALK = re.compile(r"^\s*(привет\w*|здравствуй\w*|добр�
 _PLAN = re.compile(r"(программ\w* (обучени|заняти|курс)\w*|план\w* (обучени|заняти|учеб|изучени)\w*|учебн\w+ (план|программ)\w*|"
                    r"с чего (мне )?нач[аи]\w*|что (мне )?(нужно |надо )?(учить|изучать|выучить)|study plan|learning plan|"
                    r"как (дойти|выйти|добраться) (до|на) уров\w*|как выучить (английский|язык))", re.IGNORECASE)
+# «напиши мне короткий текст про выходные», «составь письмо другу», «write a short story about my family»
+_COMPOSE = re.compile(
+    r"\b(напиш\w*|состав\w*|придума\w*|сочин\w*|write|compose|make up)\b.{0,40}?"
+    r"\b(текст\w*|рассказ\w*|истори[юяи]|письм\w*|сочинени\w*|эссе|диалог\w*|абзац\w*|предложени\w*|"
+    r"text|story|stories|letter|e-?mail|essay|dialogu?e|paragraph|sentences?)\b", re.IGNORECASE | re.DOTALL)
 _LEVEL = re.compile(r"\b([AА][12]|[BВ]1)\b", re.IGNORECASE)
 _COUNT = re.compile(r"\b(\d{1,2})\s*(вопрос\w*|задани\w*|question\w*)|\bиз\s+(\d{1,2})\b", re.IGNORECASE)
 _QUIZ_NOISE = re.compile(
@@ -61,6 +66,9 @@ def route(message: str) -> Route:
         return Route(intent="review", text=split_review(text))
     if words >= 25 and english_share(text) > 0.9:  # длинный английский текст без вопроса — это работа
         return Route(intent="review", text=text)
+    if _COMPOSE.search(text):
+        level = _LEVEL.search(text)
+        return Route(intent="compose", level=level.group(1).upper().replace("А", "A").replace("В", "B") if level else "")
     if _QUIZ.search(text) and english_share(text) < 0.9:
         level = _LEVEL.search(text)
         count = _COUNT.search(text)

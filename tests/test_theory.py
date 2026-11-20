@@ -116,3 +116,18 @@ def test_no_resume_without_assistant_prefill_support(retriever):
     llm = FakeListChatModel(responses=["Окончание -s добав形成", "не должно вызываться"])
     result = TheoryAgent(retriever, llm, can_resume=False).answer("third person singular ending -s or -es")
     assert result.answer == "Окончание -s добав"
+
+
+def test_compose_writes_text_with_model_from_materials(retriever):
+    from tutor.agent.compose import ComposeAgent
+    raw = "He works every day [1].\n\n---\n\nГрамматика: Present Simple — *works*."
+    result = ComposeAgent(retriever, FakeListChatModel(responses=[raw])).compose(
+        "third person singular ending -s or -es", "A1")
+    assert result.answer == "He works every day.\n\nГрамматика: Present Simple — *works*."  # номер ссылки убран
+    assert result.level == "A1" and len(result.citations) == 1  # образец — один фрагмент из материалов
+
+
+def test_compose_writes_text_even_without_model(retriever):
+    from tutor.agent.compose import ComposeAgent
+    result = ComposeAgent(retriever, FakeListChatModel(responses=["I like cats."])).compose("квантовая хромодинамика")
+    assert result.answer == "I like cats." and result.citations == [] and result.level == "A2"

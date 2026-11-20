@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
+from tutor.agent.compose import ComposeAgent
 from tutor.agent.quiz import QuizAgent
 from tutor.agent.review import ReviewAgent
 from tutor.agent.theory import TheoryAgent
@@ -22,6 +23,7 @@ class Services:
     store: ChunkStore
     retriever: Retriever
     theory: TheoryAgent
+    compose: ComposeAgent
     review: ReviewAgent
     quiz: QuizAgent
 
@@ -49,6 +51,9 @@ def build_services(settings: Settings) -> Services:
         theory=TheoryAgent(retriever, get_chat_model(settings),
                            resume_llm=get_chat_model(settings, temperature=RESUME_TEMPERATURE),
                            can_resume=settings.llm_provider.lower() == "ollama"),
+        compose=ComposeAgent(retriever, get_chat_model(settings, temperature=settings.compose_temperature,
+                                                       top_p=settings.quiz_top_p, top_k=settings.quiz_top_k),
+                             can_resume=settings.llm_provider.lower() == "ollama"),
         review=ReviewAgent(retriever, structured),
         quiz=QuizAgent(retriever, quiz_structured, use_fragments=settings.quiz_use_fragments, judge=structured,
                        temperature=settings.quiz_temperature),

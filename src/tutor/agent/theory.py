@@ -82,13 +82,16 @@ def suggest_topics(result: SearchResult, limit: int = 3, threshold: float = 0.0)
 
 
 class TheoryAgent:
+    user_prompt = "theory_user"  # шаблон сообщения пользователя (наследники подставляют свой)
+    resume_rule = LANGUAGE_RULE  # что дописать в системный промпт, если ответ перешёл на китайский
+
     def __init__(self, retriever: Retriever, llm, resume_llm=None, can_resume: bool = True) -> None:
         """resume_llm — модель, которая дописывает ответ, если основная перешла на китайский
         (по умолчанию та же; в сервисах — с небольшой температурой, чтобы не повторить тот же сбой)."""
         self.retriever = retriever
         # продолжение начатого ответа умеет Ollama; OpenAI-совместимые серверы (vLLM) начали бы ответ заново
         self.resumes = MAX_RESUMES if can_resume else 0
-        messages = [("system", "{system}"), ("human", load_prompt("theory_user"))]
+        messages = [("system", "{system}"), ("human", load_prompt(self.user_prompt))]
         # без StrOutputParser: по последнему куску видно done_reason (обрыв по лимиту длины)
         self.chain = ChatPromptTemplate.from_messages(messages) | llm
         # последнее сообщение — начало ответа ассистента: модель продолжает его, а не начинает заново
@@ -104,7 +107,7 @@ class TheoryAgent:
                 source = self.chain.stream(inputs)
             else:
                 source = self.resume_chain.stream(
-                    {**inputs, "system": inputs["system"] + "\n" + LANGUAGE_RULE, "prefix": text.rstrip()})
+                    {**inputs, "system": inputs["system"] + "\n" + self.resume_rule, "prefix": text.rstrip()})
             dangling = text[len(text.rstrip()):]  # пробел в конце уже показан — второй не нужен
             tail = ""  # недописанное слово держим, пока не ясно, что за ним не иероглифы
             switched = None
