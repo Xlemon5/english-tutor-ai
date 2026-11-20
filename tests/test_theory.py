@@ -131,3 +131,14 @@ def test_compose_writes_text_even_without_model(retriever):
     from tutor.agent.compose import ComposeAgent
     result = ComposeAgent(retriever, FakeListChatModel(responses=["I like cats."])).compose("квантовая хромодинамика")
     assert result.answer == "I like cats." and result.citations == [] and result.level == "A2"
+
+
+def test_compose_keeps_dialogue_lines_and_drops_examples_not_in_text():
+    from tutor.agent.compose import format_answer
+    raw = ("Customer: Can I have a coffee, please?\nBarista: Of course!\n\n"
+           "Грамматика: Present Simple — *can*, *wanted*.")
+    assert format_answer(raw) == ("**Customer:** Can I have a coffee, please?  \n**Barista:** Of course!\n\n"
+                                  "Грамматика: Present Simple — *can*.")
+    assert format_answer("I like tea.\n\nГрамматика: Past Simple — *went*.") == "I like tea.\n\nГрамматика: Past Simple."
+    many = "I went, I read, I was.\n\nГрамматика: Past Simple — *went*, *read*, *went*, *was*, *read*."
+    assert format_answer(many).endswith("Грамматика: Past Simple — *went*, *read*, *was*.")
